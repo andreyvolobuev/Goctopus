@@ -14,9 +14,9 @@ func main() {
 	flag.StringVar(&settings, "file", "goctopus.yaml", usage)
 	flag.StringVar(&settings, "f", "goctopus.yaml", usage+" (shortcut)")
 
-	goctopus := Goctopus{}
-	goctopus.LoadSettings(settings)
-	if err := http.ListenAndServe(fmt.Sprintf("%s:%s", goctopus.Hostname, goctopus.Port), &goctopus); err != nil {
+	app := Goctopus{}
+	app.LoadSettings(settings)
+	if err := http.ListenAndServe(fmt.Sprintf("%s:%s", app.Hostname, app.Port), &app); err != nil {
 		log.Fatal(err)
 	}
 }
