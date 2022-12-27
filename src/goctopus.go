@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 
@@ -8,8 +9,8 @@ import (
 )
 
 type Goctopus struct {
-	Storage map[string]string
-
+	Queue    []Message
+	Conns    []byte
 	Hostname string `yaml:"hostname"`
 	Port     string `yaml:"port"`
 }
@@ -21,6 +22,7 @@ func (g *Goctopus) LoadSettings(filename string) {
 	}
 
 	data, err := os.ReadFile(filename)
+	fmt.Println(string(data))
 	if err != nil {
 		log.Fatal(err)
 	}

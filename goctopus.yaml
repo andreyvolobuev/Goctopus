@@ -1,3 +1,2 @@
-settings:
-  hostname: "localhost"
-  port: 8000
+hostname: "localhost"
+port: 8000

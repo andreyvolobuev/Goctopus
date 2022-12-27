@@ -16,6 +16,7 @@ func main() {
 
 	app := Goctopus{}
 	app.LoadSettings(settings)
+	fmt.Println(app)
 	if err := http.ListenAndServe(fmt.Sprintf("%s:%s", app.Hostname, app.Port), &app); err != nil {
 		log.Fatal(err)
 	}
