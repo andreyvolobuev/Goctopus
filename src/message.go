@@ -2,28 +2,44 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"log"
 	"time"
 )
 
 type Message struct {
-	data     map[string]any
-	receiver string
-	date     time.Time
+	Key   string    `json:"key"`
+	Value any       `json:"value"`
+	Date  time.Time `json:"date"`
 }
 
-func (m *Message) Unmarshal(data []byte) error {
-	err := json.Unmarshal(data, m.data)
+func (m *Message) Unmarshal(data io.ReadCloser) error {
+	defer data.Close()
+
+	b, err := io.ReadAll(data)
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("%s\n", err)
+		return err
 	}
-	return err
+
+	if err := json.Unmarshal(b, &m); err != nil {
+		log.Printf("%s\n", err)
+		return err
+	}
+
+	if m.Key == "" {
+		return errors.New("invalid key")
+	}
+
+	m.Date = time.Now()
+	return nil
 }
 
 func (m *Message) Marshal() ([]byte, error) {
-	data, err := json.Marshal(m.data)
+	data, err := json.Marshal(m)
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("%s\n", err)
 	}
 	return data, err
 }

@@ -1,68 +1,76 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
+	"log"
 	"net/http"
+
+	"github.com/gobwas/ws"
+	"github.com/gobwas/ws/wsutil"
 )
 
 func (g *Goctopus) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
 	case "/":
-		g._handleHTTP(w, r)
+		g.handleHTTP(w, r)
+
 	case "/ws", "/ws/":
-		g._handleWs(w, r)
+		g.handleWs(w, r)
 	}
 }
 
-func (g *Goctopus) _handleHTTP(w http.ResponseWriter, r *http.Request) {
+func (g *Goctopus) handleHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
 	switch r.Method {
-	case "GET":
-		g._handleGet(w, r)
-
 	case "POST":
-		g._handlePost(w, r)
-
-	case "DELETE":
-		g._handleDelete(w, r)
+		g.handlePost(w, r)
 
 	default:
-		g._handleBadRequest(w, r)
+		g.handleMethodNotAllowed(w, r)
 
 	}
 }
 
-func (g *Goctopus) _handleWs(w http.ResponseWriter, r *http.Request) {
-
-}
-
-func (g *Goctopus) _handleGet(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-
-	m := make(map[string]string)
-	m["22"] = "33"
-	data, err := json.Marshal(m)
+func (g *Goctopus) handleWs(w http.ResponseWriter, r *http.Request) {
+	conn, _, _, err := ws.UpgradeHTTP(r, w)
 	if err != nil {
-		fmt.Println(err)
+		// handle error
 	}
-	w.Write(data)
+
+	// authorize request
+	// if authorized {add to g.Conns}
+	// else respond with error
+	// thats it in here!
+
+	go func() {
+		defer conn.Close()
+
+		for {
+			msg, op, err := wsutil.ReadClientData(conn)
+			if err != nil {
+				// handle error
+			}
+			err = wsutil.WriteServerMessage(conn, op, msg)
+			if err != nil {
+				// handle error
+			}
+		}
+	}()
 }
 
-func (g *Goctopus) _handlePost(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
+func (g *Goctopus) handlePost(w http.ResponseWriter, r *http.Request) {
+	m := Message{}
+	if err := m.Unmarshal(r.Body); err != nil {
+		log.Printf("%s\n", err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
 
-}
+	g.Queue <- m
 
-func (g *Goctopus) _handleDelete(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
-
 }
 
-func (g *Goctopus) _handleBadRequest(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusBadRequest)
-
+func (g *Goctopus) handleMethodNotAllowed(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusMethodNotAllowed)
 }
