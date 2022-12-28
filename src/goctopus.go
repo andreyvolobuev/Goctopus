@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
@@ -26,9 +27,10 @@ type Goctopus struct {
 	work chan func()
 	sem  chan struct{}
 
-	Hostname   string `yaml:"hostname"`
-	Port       string `yaml:"port"`
-	WorkersLen int    `yaml:"workers"`
+	Hostname      string `yaml:"hostname"`
+	Port          string `yaml:"port"`
+	WorkersLen    int    `yaml:"workers"`
+	DefaultExpire string `yaml:"expire"`
 }
 
 func (g *Goctopus) Start(filename string) {
@@ -86,16 +88,25 @@ func (g *Goctopus) SendMessages(key string) {
 
 	for _, conn := range conns {
 		for i, msg := range queue {
+			if msg.ExpireDuration < time.Since(msg.Date) {
+				log.Printf("Message has expired\n")
+				queue := g.removeMessage(queue, i)
+				g.Queue[key] = queue
+				continue
+			}
+
 			data, err := msg.Marshal()
 			if err != nil {
 				log.Printf("%s\n", err)
+				queue := g.removeMessage(queue, i)
+				g.Queue[key] = queue
 				continue
 			}
+
 			err = wsutil.WriteServerMessage(conn, ws.OpText, data)
 			fmt.Printf("Just send %s to %s\n", data, conn)
 			if err != nil {
 				log.Printf("%s\n", err)
-				continue
 			}
 			queue := g.removeMessage(queue, i)
 			g.Queue[key] = queue

@@ -22,6 +22,9 @@ func (g *Goctopus) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	switch r.Method {
+	case "GET":
+		g.handleGet(w, r)
+
 	case "POST":
 		g.handlePost(w, r)
 
@@ -54,13 +57,14 @@ func (g *Goctopus) handleWs(w http.ResponseWriter, r *http.Request) {
 			conns = append(conns, conn)
 			g.Conns[key] = conns
 			fmt.Printf("Conns now is: %+v\n", g.Conns)
+			g.SendMessages(key)
 		}
 	})
 }
 
 func (g *Goctopus) handlePost(w http.ResponseWriter, r *http.Request) {
 	m := Message{}
-	if err := m.Unmarshal(r.Body); err != nil {
+	if err := m.Unmarshal(r.Body, g.DefaultExpire); err != nil {
 		log.Printf("%s\n", err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -78,6 +82,10 @@ func (g *Goctopus) handlePost(w http.ResponseWriter, r *http.Request) {
 	})
 
 	w.WriteHeader(http.StatusAccepted)
+}
+
+func (g *Goctopus) handleGet(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
 }
 
 func (g *Goctopus) handleMethodNotAllowed(w http.ResponseWriter, r *http.Request) {
