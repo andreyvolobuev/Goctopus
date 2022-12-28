@@ -1,11 +1,11 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 
 	"github.com/gobwas/ws"
-	"github.com/gobwas/ws/wsutil"
 )
 
 func (g *Goctopus) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -32,30 +32,30 @@ func (g *Goctopus) handleHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (g *Goctopus) handleWs(w http.ResponseWriter, r *http.Request) {
-	conn, _, _, err := ws.UpgradeHTTP(r, w)
+	keys, err := g.AuthorizationHandler(r)
+
 	if err != nil {
-		// handle error
+		log.Printf("%s", err)
+		w.WriteHeader(http.StatusUnauthorized)
+		return
 	}
 
-	// authorize request
-	// if authorized {add to g.Conns}
-	// else respond with error
-	// thats it in here!
+	conn, _, _, err := ws.UpgradeHTTP(r, w)
+	if err != nil {
+		log.Printf("%s", err)
+		return
+	}
 
-	go func() {
-		defer conn.Close()
-
-		for {
-			msg, op, err := wsutil.ReadClientData(conn)
-			if err != nil {
-				// handle error
-			}
-			err = wsutil.WriteServerMessage(conn, op, msg)
-			if err != nil {
-				// handle error
-			}
+	g.Schedule(func() {
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		for _, key := range keys {
+			conns := g.Conns[key]
+			conns = append(conns, conn)
+			g.Conns[key] = conns
+			fmt.Printf("Conns now is: %+v\n", g.Conns)
 		}
-	}()
+	})
 }
 
 func (g *Goctopus) handlePost(w http.ResponseWriter, r *http.Request) {
@@ -65,8 +65,17 @@ func (g *Goctopus) handlePost(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	fmt.Printf("Got message: %+v\n", m)
 
-	g.Queue <- m
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.Schedule(func() {
+		q := g.Queue[m.Key]
+		q = append(q, m)
+		g.Queue[m.Key] = q
+		fmt.Printf("QUEUE NOW IS: %+v\n", g.Queue)
+		g.SendMessages(m.Key)
+	})
 
 	w.WriteHeader(http.StatusAccepted)
 }

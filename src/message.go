@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log"
 	"time"
 )
 
@@ -19,12 +18,10 @@ func (m *Message) Unmarshal(data io.ReadCloser) error {
 
 	b, err := io.ReadAll(data)
 	if err != nil {
-		log.Printf("%s\n", err)
 		return err
 	}
 
 	if err := json.Unmarshal(b, &m); err != nil {
-		log.Printf("%s\n", err)
 		return err
 	}
 
@@ -37,9 +34,6 @@ func (m *Message) Unmarshal(data io.ReadCloser) error {
 }
 
 func (m *Message) Marshal() ([]byte, error) {
-	data, err := json.Marshal(m)
-	if err != nil {
-		log.Printf("%s\n", err)
-	}
+	data, err := json.Marshal(m.Value)
 	return data, err
 }
