@@ -86,11 +86,13 @@ func (g *Goctopus) SendMessages(key string) {
 	queue := g.Queue[key]
 	conns := g.Conns[key]
 
-	for _, conn := range conns {
-		for i, msg := range queue {
+	for i, conn := range conns {
+		for j, msg := range queue {
+			g.mu.Lock()
+
 			if msg.ExpireDuration < time.Since(msg.Date) {
 				log.Printf("Message has expired\n")
-				queue := g.removeMessage(queue, i)
+				queue := g.removeMessage(queue, j)
 				g.Queue[key] = queue
 				continue
 			}
@@ -98,7 +100,7 @@ func (g *Goctopus) SendMessages(key string) {
 			data, err := msg.Marshal()
 			if err != nil {
 				log.Printf("%s\n", err)
-				queue := g.removeMessage(queue, i)
+				queue := g.removeMessage(queue, j)
 				g.Queue[key] = queue
 				continue
 			}
@@ -107,14 +109,25 @@ func (g *Goctopus) SendMessages(key string) {
 			fmt.Printf("Just send %s to %s\n", data, conn)
 			if err != nil {
 				log.Printf("%s\n", err)
+				conn.Close()
+				conns := g.removeConn(conns, i)
+				g.Conns[key] = conns
+				continue
 			}
-			queue := g.removeMessage(queue, i)
+
+			queue := g.removeMessage(queue, j)
 			g.Queue[key] = queue
+			g.mu.Unlock()
 		}
 	}
 }
 
 func (g *Goctopus) removeMessage(s []Message, i int) []Message {
+	s[i] = s[len(s)-1]
+	return s[:len(s)-1]
+}
+
+func (g *Goctopus) removeConn(s []net.Conn, i int) []net.Conn {
 	s[i] = s[len(s)-1]
 	return s[:len(s)-1]
 }
