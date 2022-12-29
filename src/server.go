@@ -22,9 +22,6 @@ func (g *Goctopus) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	switch r.Method {
-	case "GET":
-		g.handleGet(w, r)
-
 	case "POST":
 		g.handlePost(w, r)
 
@@ -52,13 +49,12 @@ func (g *Goctopus) handleWs(w http.ResponseWriter, r *http.Request) {
 	g.Schedule(func() {
 		g.mu.Lock()
 		defer g.mu.Unlock()
+
 		for _, key := range keys {
-			conns := g.Conns[key]
-			conns = append(conns, conn)
-			g.Conns[key] = conns
-			fmt.Printf("Conns now is: %+v\n", g.Conns)
+			g.NewConn(key, conn)
 			g.SendMessages(key)
 		}
+
 	})
 }
 
@@ -71,21 +67,15 @@ func (g *Goctopus) handlePost(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Printf("Got message: %+v\n", m)
 
-	g.mu.Lock()
-	defer g.mu.Unlock()
 	g.Schedule(func() {
-		q := g.Queue[m.Key]
-		q = append(q, m)
-		g.Queue[m.Key] = q
-		fmt.Printf("QUEUE NOW IS: %+v\n", g.Queue)
+		g.mu.Lock()
+		defer g.mu.Unlock()
+
+		g.QueueMessage(m)
 		g.SendMessages(m.Key)
 	})
 
 	w.WriteHeader(http.StatusAccepted)
-}
-
-func (g *Goctopus) handleGet(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
 }
 
 func (g *Goctopus) handleMethodNotAllowed(w http.ResponseWriter, r *http.Request) {

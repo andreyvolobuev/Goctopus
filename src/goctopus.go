@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"os"
 	"sync"
-	"time"
 
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
@@ -20,7 +19,7 @@ type Goctopus struct {
 	Conns   map[string][]net.Conn
 	AuthURL *url.URL
 
-	mu sync.RWMutex
+	mu sync.Mutex
 
 	AuthorizationHandler func(*http.Request) ([]string, error)
 
@@ -88,10 +87,8 @@ func (g *Goctopus) SendMessages(key string) {
 
 	for i, conn := range conns {
 		for j, msg := range queue {
-			g.mu.Lock()
-
-			if msg.ExpireDuration < time.Since(msg.Date) {
-				log.Printf("Message has expired\n")
+			if msg.IsExpired() {
+				log.Printf("Message is expired\n")
 				queue := g.removeMessage(queue, j)
 				g.Queue[key] = queue
 				continue
@@ -109,7 +106,6 @@ func (g *Goctopus) SendMessages(key string) {
 			fmt.Printf("Just send %s to %s\n", data, conn)
 			if err != nil {
 				log.Printf("%s\n", err)
-				conn.Close()
 				conns := g.removeConn(conns, i)
 				g.Conns[key] = conns
 				continue
@@ -117,9 +113,15 @@ func (g *Goctopus) SendMessages(key string) {
 
 			queue := g.removeMessage(queue, j)
 			g.Queue[key] = queue
-			g.mu.Unlock()
 		}
 	}
+}
+
+func (g *Goctopus) QueueMessage(m Message) {
+	queue := g.Queue[m.Key]
+	queue = append(queue, m)
+	g.Queue[m.Key] = queue
+	fmt.Printf("QUEUE NOW IS: %+v\n", g.Queue)
 }
 
 func (g *Goctopus) removeMessage(s []Message, i int) []Message {
@@ -127,7 +129,16 @@ func (g *Goctopus) removeMessage(s []Message, i int) []Message {
 	return s[:len(s)-1]
 }
 
+func (g *Goctopus) NewConn(key string, conn net.Conn) {
+	conns := g.Conns[key]
+	conns = append(conns, conn)
+	g.Conns[key] = conns
+	fmt.Printf("Conns now is: %+v\n", g.Conns)
+}
+
 func (g *Goctopus) removeConn(s []net.Conn, i int) []net.Conn {
+	conn := s[i]
+	defer conn.Close()
 	s[i] = s[len(s)-1]
 	return s[:len(s)-1]
 }

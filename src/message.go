@@ -8,10 +8,10 @@ import (
 )
 
 type Message struct {
-	Key            string    `json:"key"`
-	Value          any       `json:"value"`
-	Date           time.Time `json:"date"`
-	Expire         string    `json:"expire"`
+	Key            string `json:"key"`
+	Value          any    `json:"value"`
+	Expire         string `json:"expire"`
+	Date           time.Time
 	ExpireDuration time.Duration
 }
 
@@ -48,4 +48,8 @@ func (m *Message) Unmarshal(data io.ReadCloser, defaultExpire string) error {
 func (m *Message) Marshal() ([]byte, error) {
 	data, err := json.Marshal(m.Value)
 	return data, err
+}
+
+func (m *Message) IsExpired() bool {
+	return m.ExpireDuration < time.Since(m.Date)
 }
