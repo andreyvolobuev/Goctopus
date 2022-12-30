@@ -35,16 +35,18 @@ func (g *Goctopus) handleWs(w http.ResponseWriter, r *http.Request) {
 	keys, err := g.AuthorizationHandler(r)
 
 	if err != nil {
-		log.Printf("%s", err)
+		log.Printf("%s\n", err)
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 
 	conn, _, _, err := ws.UpgradeHTTP(r, w)
 	if err != nil {
-		log.Printf("%s", err)
+		log.Printf("%s\n", err)
 		return
 	}
+
+	log.Printf("New connection for: %s\n", keys)
 
 	g.Schedule(func() {
 		g.mu.Lock()
@@ -78,6 +80,8 @@ func (g *Goctopus) handlePost(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+
+	log.Printf("New message for %s (expires in: %s)\n", m.Key, m.Expire)
 
 	g.Schedule(func() {
 		g.mu.Lock()

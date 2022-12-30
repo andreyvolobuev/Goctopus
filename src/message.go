@@ -16,6 +16,11 @@ type Message struct {
 	ExpireDuration time.Duration
 }
 
+func (m *Message) Marshal() ([]byte, error) {
+	data, err := json.Marshal(m.Value)
+	return data, err
+}
+
 func (m *Message) Unmarshal(data io.ReadCloser) error {
 	defer data.Close()
 
@@ -44,11 +49,6 @@ func (m *Message) Unmarshal(data io.ReadCloser) error {
 	m.ExpireDuration = exp
 
 	return nil
-}
-
-func (m *Message) Marshal() ([]byte, error) {
-	data, err := json.Marshal(m.Value)
-	return data, err
 }
 
 func (m *Message) IsExpired() bool {

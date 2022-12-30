@@ -48,7 +48,10 @@ func Authorize(r *http.Request) ([]string, error) {
 		return []string{}, errors.New("user credentials are missing")
 	}
 
-	email := []string{user["email"].(string)}
+	keys := []string{
+		user["email"].(string),
+		user["organization_name"].(string),
+	}
 
-	return email, nil
+	return keys, nil
 }

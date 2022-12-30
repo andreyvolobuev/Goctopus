@@ -32,6 +32,7 @@ func (g *Goctopus) Start() {
 	if err != nil {
 		log.Fatal("WS_WORKERS is not set.")
 	}
+	g.AuthorizationHandler = Authorize
 	g.sem = make(chan struct{}, n_workers)
 	g.work = make(chan func())
 }
