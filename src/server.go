@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 
@@ -60,12 +59,11 @@ func (g *Goctopus) handleWs(w http.ResponseWriter, r *http.Request) {
 
 func (g *Goctopus) handlePost(w http.ResponseWriter, r *http.Request) {
 	m := Message{}
-	if err := m.Unmarshal(r.Body, g.DefaultExpire); err != nil {
+	if err := m.Unmarshal(r.Body); err != nil {
 		log.Printf("%s\n", err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	fmt.Printf("Got message: %+v\n", m)
 
 	g.Schedule(func() {
 		g.mu.Lock()

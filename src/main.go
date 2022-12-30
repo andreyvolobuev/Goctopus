@@ -1,23 +1,21 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"log"
+	"os"
 	"net/http"
 )
 
 var settings string
 
 func main() {
-	usage := "Filename"
-	flag.StringVar(&settings, "file", "goctopus.yaml", usage)
-	flag.StringVar(&settings, "f", "goctopus.yaml", usage+" (shortcut)")
-	flag.Parse()
+	host := os.Getenv("WS_HOST")
+	port := os.Getenv("WS_PORT")
 
-	app := Goctopus{AuthorizationHandler: Authorize}
-	app.Start(settings)
-	if err := http.ListenAndServe(fmt.Sprintf("%s:%s", app.Hostname, app.Port), &app); err != nil {
+	app := Goctopus{}
+	app.Start()
+	if err := http.ListenAndServe(fmt.Sprintf("%s:%s", host, port), &app); err != nil {
 		log.Fatal(err)
 	}
 }

@@ -1,4 +1,0 @@
-hostname: "localhost"
-port: 8000
-workers: 4
-expire: 1h
