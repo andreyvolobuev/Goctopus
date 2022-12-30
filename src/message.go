@@ -37,7 +37,7 @@ func (m *Message) Unmarshal(data io.ReadCloser) error {
 		return errors.New("invalid message key")
 	}
 
-    if m.Value == "" {
+    if m.Value == nil {
         return errors.New("invalid message value")
     }
 
