@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"os"
 	"time"
 )
 
@@ -15,7 +16,12 @@ type Message struct {
 	ExpireDuration time.Duration
 }
 
-func (m *Message) Unmarshal(data io.ReadCloser, defaultExpire string) error {
+func (m *Message) Marshal() ([]byte, error) {
+	data, err := json.Marshal(m.Value)
+	return data, err
+}
+
+func (m *Message) Unmarshal(data io.ReadCloser) error {
 	defer data.Close()
 
 	b, err := io.ReadAll(data)
@@ -28,28 +34,29 @@ func (m *Message) Unmarshal(data io.ReadCloser, defaultExpire string) error {
 	}
 
 	if m.Key == "" {
-		return errors.New("invalid key")
+		return errors.New("invalid message key")
 	}
 
-	m.Date = time.Now()
+    if m.Value == nil {
+        return errors.New("invalid message value")
+    }
 
 	if m.Expire == "" {
-		m.Expire = defaultExpire
+		m.Expire = os.Getenv("WS_MSG_EXPIRE")
 	}
 	exp, err := time.ParseDuration(m.Expire)
+
 	if err != nil {
 		return err
 	}
 	m.ExpireDuration = exp
 
-	return nil
-}
+	m.Date = time.Now()
 
-func (m *Message) Marshal() ([]byte, error) {
-	data, err := json.Marshal(m.Value)
-	return data, err
+	return nil
 }
 
 func (m *Message) IsExpired() bool {
 	return m.ExpireDuration < time.Since(m.Date)
 }
+

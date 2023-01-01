@@ -1,23 +1,25 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 )
 
-var settings string
-
 func main() {
-	usage := "Filename"
-	flag.StringVar(&settings, "file", "goctopus.yaml", usage)
-	flag.StringVar(&settings, "f", "goctopus.yaml", usage+" (shortcut)")
-	flag.Parse()
+	host := os.Getenv("WS_HOST")
+	port := os.Getenv("WS_PORT")
 
-	app := Goctopus{AuthorizationHandler: Authorize}
-	app.Start(settings)
-	if err := http.ListenAndServe(fmt.Sprintf("%s:%s", app.Hostname, app.Port), &app); err != nil {
+	fmt.Println("---------------------------------")
+	fmt.Printf("Goctopus listens to: %s:%s\n", host, port)
+	fmt.Printf("Num workers is: %s\n", os.Getenv("WS_WORKERS"))
+	fmt.Printf("Default message expiry is: %s\n", os.Getenv("WS_MSG_EXPIRE"))
+	fmt.Printf("---------------------------------\n\n")
+
+	app := Goctopus{}
+	app.Start()
+	if err := http.ListenAndServe(fmt.Sprintf("%s:%s", host, port), &app); err != nil {
 		log.Fatal(err)
 	}
 }

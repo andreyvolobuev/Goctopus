@@ -1,23 +1,20 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"sync"
+	"strconv"
 
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
-	"gopkg.in/yaml.v3"
 )
 
 type Goctopus struct {
 	Queue   map[string][]Message
 	Conns   map[string][]net.Conn
-	AuthURL *url.URL
 
 	mu sync.Mutex
 
@@ -25,44 +22,19 @@ type Goctopus struct {
 
 	work chan func()
 	sem  chan struct{}
-
-	Hostname      string `yaml:"hostname"`
-	Port          string `yaml:"port"`
-	WorkersLen    int    `yaml:"workers"`
-	DefaultExpire string `yaml:"expire"`
 }
 
-func (g *Goctopus) Start(filename string) {
-	g.loadSettings(filename)
-	g.launchWorkers()
-}
-
-func (g *Goctopus) loadSettings(filename string) {
-	if filename == "" {
-		filename = "goctopus.yaml"
-	}
-
-	data, err := os.ReadFile(filename)
-	fmt.Println(string(data))
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if err := yaml.Unmarshal(data, g); err != nil {
-		log.Fatal(err)
-	}
-
-	if g.WorkersLen == 0 {
-		g.WorkersLen = 4
-	}
-
+func (g *Goctopus) Start() {
 	g.Queue = make(map[string][]Message)
 	g.Conns = make(map[string][]net.Conn)
-}
 
-func (g *Goctopus) launchWorkers() {
+	n_workers, err := strconv.Atoi(os.Getenv("WS_WORKERS"))
+	if err != nil {
+		log.Fatal("WS_WORKERS is not set.")
+	}
+	g.AuthorizationHandler = Authorize
+	g.sem = make(chan struct{}, n_workers)
 	g.work = make(chan func())
-	g.sem = make(chan struct{}, g.WorkersLen)
 }
 
 func (g *Goctopus) Schedule(task func()) {
@@ -103,7 +75,6 @@ func (g *Goctopus) SendMessages(key string) {
 			}
 
 			err = wsutil.WriteServerMessage(conn, ws.OpText, data)
-			fmt.Printf("Just send %s to %s\n", data, conn)
 			if err != nil {
 				log.Printf("%s\n", err)
 				conns := g.removeConn(conns, i)
@@ -121,7 +92,6 @@ func (g *Goctopus) QueueMessage(m Message) {
 	queue := g.Queue[m.Key]
 	queue = append(queue, m)
 	g.Queue[m.Key] = queue
-	fmt.Printf("QUEUE NOW IS: %+v\n", g.Queue)
 }
 
 func (g *Goctopus) removeMessage(s []Message, i int) []Message {
@@ -133,7 +103,6 @@ func (g *Goctopus) NewConn(key string, conn net.Conn) {
 	conns := g.Conns[key]
 	conns = append(conns, conn)
 	g.Conns[key] = conns
-	fmt.Printf("Conns now is: %+v\n", g.Conns)
 }
 
 func (g *Goctopus) removeConn(s []net.Conn, i int) []net.Conn {

@@ -1,8 +1,8 @@
 package main
 
 import (
-	"fmt"
 	"log"
+	"os"
 	"net/http"
 
 	"github.com/gobwas/ws"
@@ -35,16 +35,18 @@ func (g *Goctopus) handleWs(w http.ResponseWriter, r *http.Request) {
 	keys, err := g.AuthorizationHandler(r)
 
 	if err != nil {
-		log.Printf("%s", err)
+		log.Printf("%s\n", err)
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 
 	conn, _, _, err := ws.UpgradeHTTP(r, w)
 	if err != nil {
-		log.Printf("%s", err)
+		log.Printf("%s\n", err)
 		return
 	}
+
+	log.Printf("New connection for: %s\n", keys)
 
 	g.Schedule(func() {
 		g.mu.Lock()
@@ -59,13 +61,27 @@ func (g *Goctopus) handleWs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (g *Goctopus) handlePost(w http.ResponseWriter, r *http.Request) {
+	username, password, ok := r.BasicAuth()
+	if !ok {
+		log.Printf("Credentials for POST-request not provided!\n")
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	if username != os.Getenv("WS_LOGIN") || password != os.Getenv("WS_PASSWORD") {
+		log.Printf("POST-request with bad credentials\n")
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
 	m := Message{}
-	if err := m.Unmarshal(r.Body, g.DefaultExpire); err != nil {
+	if err := m.Unmarshal(r.Body); err != nil {
 		log.Printf("%s\n", err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	fmt.Printf("Got message: %+v\n", m)
+
+	log.Printf("New message for %s (expires in: %s)\n", m.Key, m.Expire)
 
 	g.Schedule(func() {
 		g.mu.Lock()
