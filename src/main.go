@@ -3,11 +3,9 @@ package main
 import (
 	"fmt"
 	"log"
-	"os"
 	"net/http"
+	"os"
 )
-
-var settings string
 
 func main() {
 	host := os.Getenv("WS_HOST")
