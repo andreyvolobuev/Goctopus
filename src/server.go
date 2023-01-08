@@ -2,8 +2,8 @@ package main
 
 import (
 	"log"
-	"os"
 	"net/http"
+	"os"
 
 	"github.com/gobwas/ws"
 )
@@ -61,17 +61,19 @@ func (g *Goctopus) handleWs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (g *Goctopus) handlePost(w http.ResponseWriter, r *http.Request) {
-	username, password, ok := r.BasicAuth()
-	if !ok {
-		log.Printf("Credentials for POST-request not provided!\n")
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
+	if os.Getenv("WS_LOGIN") != "" && os.Getenv("WS_PASSWORD") != "" {
+		username, password, ok := r.BasicAuth()
+		if !ok {
+			log.Printf("Credentials for POST-request not provided!\n")
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
 
-	if username != os.Getenv("WS_LOGIN") || password != os.Getenv("WS_PASSWORD") {
-		log.Printf("POST-request with bad credentials\n")
-		w.WriteHeader(http.StatusForbidden)
-		return
+		if username != os.Getenv("WS_LOGIN") || password != os.Getenv("WS_PASSWORD") {
+			log.Printf("POST-request with bad credentials\n")
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
 	}
 
 	m := Message{}

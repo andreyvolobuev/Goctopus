@@ -5,16 +5,16 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"sync"
 	"strconv"
+	"sync"
 
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
 )
 
 type Goctopus struct {
-	Queue   map[string][]Message
-	Conns   map[string][]net.Conn
+	Queue map[string][]Message
+	Conns map[string][]net.Conn
 
 	mu sync.Mutex
 
@@ -28,10 +28,7 @@ func (g *Goctopus) Start() {
 	g.Queue = make(map[string][]Message)
 	g.Conns = make(map[string][]net.Conn)
 
-	n_workers, err := strconv.Atoi(os.Getenv("WS_WORKERS"))
-	if err != nil {
-		log.Fatal("WS_WORKERS is not set.")
-	}
+	n_workers, _ := strconv.Atoi(os.Getenv("WS_WORKERS")) // there's a default value for n_workers hence no error handling here
 	g.AuthorizationHandler = Authorize
 	g.sem = make(chan struct{}, n_workers)
 	g.work = make(chan func())
