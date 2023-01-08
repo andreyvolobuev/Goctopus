@@ -1,5 +1,7 @@
 # Goctopus
 
+Add websocket support to any project independently of it's tech stack.
+
 Simple websocket service that will work with literally any backend and frontend. You can use it with Django, FastAPI, Flask etc. All that a backend has to be able to do, in order to send websocket messages to frontend, is to be able to do HTTP POST requests with Basic authorization.
 
 
