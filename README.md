@@ -38,18 +38,10 @@ func (r *AuthResponse) Export() []string {
 }
 ```
 
-3. Set required environment variables, compile and run the app:
+3. Compile and run the app:
 ```
-export WS_HOST=0.0.0.0
-export WS_PORT=7890
-export WS_WORKERS=128
-export WS_MSG_EXPIRE=30m
-export WS_LOGIN=amdin
-export WS_PASSWORD=password
-export WS_AUTH_URL=http://localhost/api/v1/is_authenticated
-
 go build -o goctopus src/.
-./goctopus
+./goctopus --host 0.0.0.0 --port 7890 --workers 1024 --expire 30m --login admin --password password --auth http://localhost/api/v1/is_authenticated
 ```
 
 you may also just use Docker:
@@ -67,13 +59,13 @@ docker run \
 ```
 
 *Please note that Goctopus requires the following environment variables to be set in order to work*
-- WS_HOST: hostname or ip that the server will run on
-- WS_PORT: port that the server will listen to
-- WS_WORKERS: number of workers (goroutines) that will process the websocket connections. Each takes about 8kb of RAM
-- WS_MSG_EXPIRE: if a message is sent from backend but Goctopus can't find a corresponding connection from frontend, then it will keep the message for this amount of time and if the requested user finally joins then the message will be delivered
-- WS_LOGIN: login required from backend to send POST-requests
-- WS_PASSWORD: password required from backend to send POST-requests
-- WS_AUTH_URL: forward incomming requests from frontend to this URL in order to authorize a request
+- WS_HOST (flag --host): hostname or ip that the server will run on
+- WS_PORT (flag --port): port that the server will listen to
+- WS_WORKERS (flag --workers): number of workers (goroutines) that will process the websocket connections. Each takes about 8kb of RAM
+- WS_MSG_EXPIRE (flag --expire): if a message is sent from backend but Goctopus can't find a corresponding connection from frontend, then it will keep the message for this amount of time and if the requested user finally joins then the message will be delivered
+- WS_LOGIN (flag --login): login required from backend to send POST-requests
+- WS_PASSWORD (flag --password): password required from backend to send POST-requests
+- WS_AUTH_URL (flag --auth): forward incomming requests from frontend to this URL in order to authorize a request
 
 
 ### API
