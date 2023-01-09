@@ -20,7 +20,16 @@ type AuthResponse struct {
 
 // Export actually needed fields of Authentication Request fields as a list of strings
 func (r *AuthResponse) Export() []string {
-	return []string{r.User.Email, r.User.Ogranization}
+    exported := []string{}
+
+	keys := []string{r.User.Email, r.User.Ogranization}
+	for i, key := range keys {
+		if key != "" {
+			exported = append(exported, key)
+		}
+	}
+
+	return exported
 }
 
 // One might redefine this func in order to get different authorization logic,
