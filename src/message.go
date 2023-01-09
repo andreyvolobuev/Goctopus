@@ -37,9 +37,9 @@ func (m *Message) Unmarshal(data io.ReadCloser) error {
 		return errors.New("invalid message key")
 	}
 
-    if m.Value == nil {
-        return errors.New("invalid message value")
-    }
+	if m.Value == nil {
+		return errors.New("invalid message value")
+	}
 
 	if m.Expire == "" {
 		m.Expire = os.Getenv("WS_MSG_EXPIRE")
@@ -59,4 +59,3 @@ func (m *Message) Unmarshal(data io.ReadCloser) error {
 func (m *Message) IsExpired() bool {
 	return m.ExpireDuration < time.Since(m.Date)
 }
-
