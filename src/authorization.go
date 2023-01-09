@@ -10,6 +10,17 @@ import (
 	"os"
 )
 
+// This whole module might be redefined in order to create authorization logic
+// that you actually need in your own project.
+//
+// This one is pretty straight-forward and just does forwarding of requests
+// to URL that is defined in WS_AUTH_URL environment variable OR that is set
+// via --auth flag when you run the app.
+//
+// The URL must response with some kind of object, structure of which is described
+// bellow, in AuthResponse struct. AuthResponse implements Export method, that
+// returns a list of strings. Those are identifiers of the request.
+
 // Authentication response schema shall be described into this struct
 type AuthResponse struct {
 	User struct {
@@ -20,7 +31,7 @@ type AuthResponse struct {
 
 // Export actually needed fields of Authentication Request fields as a list of strings
 func (r *AuthResponse) Export() []string {
-    exported := []string{}
+	exported := []string{}
 
 	keys := []string{r.User.Email, r.User.Ogranization}
 	for _, key := range keys {
@@ -32,9 +43,6 @@ func (r *AuthResponse) Export() []string {
 	return exported
 }
 
-// One might redefine this func in order to get different authorization logic,
-// but what's important is that this func has to accept request and return
-// list or strings that represent names for the authorized user and an error
 func Authorize(r *http.Request) ([]string, error) {
 	AuthURL, err := url.Parse(os.Getenv("WS_AUTH_URL"))
 	if err != nil {
