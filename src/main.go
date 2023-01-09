@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	host, port, workers, expire, login, password, authUrl string
+	host, port, workers, expire, login, password, authUrl, verbose string
 )
 
 func main() {
@@ -41,6 +41,14 @@ func main() {
 	flag.StringVar(&password, "password", os.Getenv("WS_PASSWORD"), "Password to authorize sending websocket messages")
 
 	flag.StringVar(&authUrl, "auth", os.Getenv("WS_AUTH_URL"), "URL to forward websockets requests to in order to obtain user's identifier")
+
+	verboseDefault, ok := os.LookupEnv("WS_VERBOSE")
+	if !ok {
+		verboseDefault = "False"
+	}
+	flag.StringVar(&verbose, "verbose", verboseDefault, "Whether or not log everything to console")
+	os.Setenv("WS_VERBOSE", verbose)
+
 	flag.Parse()
 
 	os.Setenv("WS_WORKERS", workers)
@@ -53,14 +61,15 @@ func main() {
 	}
 	os.Setenv("WS_AUTH_URL", authUrl)
 
+	app := Goctopus{}
+	app.Start()
+
 	fmt.Println("---------------------------------")
 	fmt.Printf("Goctopus listens to: %s:%s\n", host, port)
 	fmt.Printf("Num workers is: %s\n", os.Getenv("WS_WORKERS"))
 	fmt.Printf("Default message expiry is: %s\n", os.Getenv("WS_MSG_EXPIRE"))
 	fmt.Printf("---------------------------------\n\n")
 
-	app := Goctopus{}
-	app.Start()
 	if err := http.ListenAndServe(fmt.Sprintf("%s:%s", host, port), &app); err != nil {
 		log.Fatal(err)
 	}

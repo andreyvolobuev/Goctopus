@@ -3,7 +3,6 @@ package main
 import (
 	"log"
 	"net"
-	"net/http"
 	"os"
 	"strconv"
 	"sync"
@@ -18,18 +17,17 @@ type Goctopus struct {
 
 	mu sync.Mutex
 
-	AuthorizationHandler func(*http.Request) ([]string, error)
-
 	work chan func()
 	sem  chan struct{}
 }
 
 func (g *Goctopus) Start() {
+	g.Log("starting Goctopus websocket app...")
+
 	g.Queue = make(map[string][]Message)
 	g.Conns = make(map[string][]net.Conn)
 
 	n_workers, _ := strconv.Atoi(os.Getenv("WS_WORKERS")) // there's a default value for n_workers hence no error handling here
-	g.AuthorizationHandler = Authorize
 	g.sem = make(chan struct{}, n_workers)
 	g.work = make(chan func())
 }
@@ -57,7 +55,7 @@ func (g *Goctopus) SendMessages(key string) {
 	for i, conn := range conns {
 		for j, msg := range queue {
 			if msg.IsExpired() {
-				log.Printf("Message is expired\n")
+				g.Log("Message is expired\n")
 				queue := g.removeMessage(queue, j)
 				g.Queue[key] = queue
 				continue
@@ -65,7 +63,7 @@ func (g *Goctopus) SendMessages(key string) {
 
 			data, err := msg.Marshal()
 			if err != nil {
-				log.Printf("%s\n", err)
+				g.Log("%s\n", err)
 				queue := g.removeMessage(queue, j)
 				g.Queue[key] = queue
 				continue
@@ -73,7 +71,7 @@ func (g *Goctopus) SendMessages(key string) {
 
 			err = wsutil.WriteServerMessage(conn, ws.OpText, data)
 			if err != nil {
-				log.Printf("%s\n", err)
+				g.Log("%s\n", err)
 				conns := g.removeConn(conns, i)
 				g.Conns[key] = conns
 				continue
@@ -107,4 +105,14 @@ func (g *Goctopus) removeConn(s []net.Conn, i int) []net.Conn {
 	defer conn.Close()
 	s[i] = s[len(s)-1]
 	return s[:len(s)-1]
+}
+
+func (g *Goctopus) Log(format string, v ...any) {
+	verbose, err := strconv.ParseBool(os.Getenv("WS_VERBOSE"))
+	if err != nil {
+		verbose = false
+	}
+	if verbose {
+		log.Printf(format, v...)
+	}
 }

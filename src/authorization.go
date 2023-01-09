@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -43,10 +42,10 @@ func (r *AuthResponse) Export() []string {
 	return exported
 }
 
-func Authorize(r *http.Request) ([]string, error) {
+func (g *Goctopus) Authorize(r *http.Request) ([]string, error) {
 	AuthURL, err := url.Parse(os.Getenv("WS_AUTH_URL"))
 	if err != nil {
-		log.Printf("%s\n", err)
+		g.Log("%s\n", err)
 	}
 
 	r.URL = AuthURL
@@ -55,19 +54,19 @@ func Authorize(r *http.Request) ([]string, error) {
 	client := &http.Client{}
 	resp, err := client.Do(r)
 	if err != nil {
-		log.Printf("%s\n", err)
+		g.Log("%s\n", err)
 		return []string{}, err
 	}
 
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Printf("%s\n", err)
+		g.Log("%s\n", err)
 		return []string{}, err
 	}
 
 	data := AuthResponse{}
 	if err := json.Unmarshal(b, &data); err != nil {
-		log.Printf("%s\n", err)
+		g.Log("%s\n", err)
 		return []string{}, err
 	}
 
