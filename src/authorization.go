@@ -23,7 +23,7 @@ func (r *AuthResponse) Export() []string {
     exported := []string{}
 
 	keys := []string{r.User.Email, r.User.Ogranization}
-	for i, key := range keys {
+	for _, key := range keys {
 		if key != "" {
 			exported = append(exported, key)
 		}
