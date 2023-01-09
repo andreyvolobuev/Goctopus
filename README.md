@@ -1,5 +1,7 @@
 # Goctopus
 
+![Goctopus logo](logo.png)
+
 Add websocket support to any project independently of it's tech stack.
 
 Simple websocket service that will work with literally any backend and frontend. You can use it with Django, FastAPI, Flask etc. All that a backend has to do is just send POST-requests to Goctopus and it will handle forwarding those to frontend websocket connections.
