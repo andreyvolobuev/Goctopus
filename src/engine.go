@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"strconv"
 	"sync"
@@ -14,6 +15,8 @@ import (
 type Goctopus struct {
 	Queue map[string][]Message
 	Conns map[string][]net.Conn
+
+	AuthHandler func(*http.Request) ([]string, error)
 
 	mu sync.Mutex
 
@@ -27,7 +30,14 @@ func (g *Goctopus) Start() {
 	g.Queue = make(map[string][]Message)
 	g.Conns = make(map[string][]net.Conn)
 
-	n_workers, _ := strconv.Atoi(os.Getenv("WS_WORKERS")) // there's a default value for n_workers hence no error handling here
+	if g.AuthHandler == nil {
+		g.AuthHandler = g.Authorize
+	}
+
+	n_workers, err := strconv.Atoi(os.Getenv("WS_WORKERS"))
+	if err != nil {
+		panic("Can not parse WS_WORKERS! The value has to be an integer.")
+	}
 	g.sem = make(chan struct{}, n_workers)
 	g.work = make(chan func())
 }
@@ -56,29 +66,25 @@ func (g *Goctopus) SendMessages(key string) {
 		for j, msg := range queue {
 			if msg.IsExpired() {
 				g.Log("Message is expired\n")
-				queue := g.removeMessage(queue, j)
-				g.Queue[key] = queue
+				g.Queue[key] = g.removeMessage(queue, j)
 				continue
 			}
 
 			data, err := msg.Marshal()
 			if err != nil {
-				g.Log("%s\n", err)
-				queue := g.removeMessage(queue, j)
-				g.Queue[key] = queue
+				g.Log("%s. Will discard this message from %s\n", err, key)
+				g.Queue[key] = g.removeMessage(queue, j)
 				continue
 			}
 
 			err = wsutil.WriteServerMessage(conn, ws.OpText, data)
 			if err != nil {
-				g.Log("%s\n", err)
-				conns := g.removeConn(conns, i)
-				g.Conns[key] = conns
+				g.Log("%s. Will remove a conn from %s\n", err, key)
+				g.Conns[key] = g.removeConn(conns, i)
 				continue
 			}
 
-			queue := g.removeMessage(queue, j)
-			g.Queue[key] = queue
+			g.Queue[key] = g.removeMessage(queue, j)
 		}
 	}
 }

@@ -31,7 +31,7 @@ func (g *Goctopus) handleHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (g *Goctopus) handleWs(w http.ResponseWriter, r *http.Request) {
-	keys, err := g.Authorize(r)
+	keys, err := g.AuthHandler(r)
 
 	if err != nil {
 		g.Log("%s\n", err)
