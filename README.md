@@ -2,17 +2,16 @@
 
 Add websocket support to any project independently of it's tech stack.
 
-Simple websocket service that will work with literally any backend and frontend. You can use it with Django, FastAPI, Flask etc. All that a backend has to be able to do, in order to send websocket messages to frontend, is to be able to do HTTP POST requests with Basic authorization.
+Simple websocket service that will work with literally any backend and frontend. You can use it with Django, FastAPI, Flask etc. All that a backend has to do is just send POST-requests to Goctopus and it will handle forwarding those to frontend websocket connections.
 
 
 ### Overview
 
-Goctopus runs as a server app on selected hostname and port waiting for incomming connections. Frontend should connect via websocket protocol. 
+Goctopus runs as a server app on selected hostname and port waiting for incomming connections. Frontend should connect via websocket protocol. Backend just sends POST-requests.
 
-The HTTP request for establishing websocket connection will be forwarded to address pointed to by `WS_AUTH_URL` environment variable. The structure of response from that endpoint is described in [src/authorization.go](https://github.com/andreyvolobuev/goctopus/blob/master/src/authorization.go). There's func `Export` that will return a list of strings. These are keys (one might call them topics) that will identify current connection. That may be user id or email or even an organization name (in case you want to send a message to multiple users).
+When frontend tries to establist a new websocket connection with Goctopus, it will forward the request (along with all of it's headers and cookies) to address pointed to by `WS_AUTH_URL` environment variable in order to authenticate request. The structure of response from that endpoint is described in [src/authorization.go](https://github.com/andreyvolobuev/goctopus/blob/master/src/authorization.go). There's func `Export` that will return a list of strings. These are keys (one might call them topics) that will identify current connection. That may be a user id or an email or even an organization name (in case you want to send a message to multiple users).
 
-Backend on the other hand has to know how to identify a user. Once an event happended, backend app may use that identifier to send a message to the corresponding user/group of users. That is achieved by sending a POST-request go Goctopus.
-
+Backend on the other hand just sends POST-requests to Goctopus pointing to user id that it wishes to send the message to.
 
 
 ### Install
@@ -34,14 +33,23 @@ type AuthResponse struct {
 }
 
 func (r *AuthResponse) Export() []string {
-	return []string{r.User.Email, r.User.Ogranization}
+	exported := []string{}
+
+	keys := []string{r.User.Email, r.User.Ogranization}
+	for _, key := range keys {
+		if key != "" {
+			exported = append(exported, key)
+		}
+	}
+
+	return exported
 }
 ```
 
 3. Compile and run the app:
 ```
 go build -o goctopus src/.
-./goctopus --host 0.0.0.0 --port 7890 --workers 1024 --expire 30m --login admin --password password --auth http://localhost/api/v1/is_authenticated
+./goctopus --host 0.0.0.0 --port 7890 --workers 1024 --expire 30m --login admin --password password --auth http://localhost/api/v1/is_authenticated --verbose true
 ```
 
 you may also just use Docker:
@@ -50,11 +58,13 @@ docker build -t goctopus .
 docker run \
     -e WS_HOST=0.0.0.0 \
     -e WS_PORT=7890 \
-    -e WS_WORKERS=128 \
+    -e WS_WORKERS=1024 \
     -e WS_MSG_EXPIRE=30m \
-    -e WS_LOGIN=admin \
+    -e WS_LOGIN=login \
     -e WS_PASSWORD=password \
     -e WS_AUTH_URL=http://localhost/api/v1/is_authenticated \
+    -e WS_VERBOSE=1 \
+    -p 7890:7890 \
     goctopus
 ```
 
@@ -66,13 +76,14 @@ docker run \
 - WS_LOGIN (flag --login): login required from backend to send POST-requests
 - WS_PASSWORD (flag --password): password required from backend to send POST-requests
 - WS_AUTH_URL (flag --auth): forward incomming requests from frontend to this URL in order to authorize a request
+- WS_VERBOSE (flag --verbose): wether or not log everything to console
 
 
 ### API
 
 - frontend should create a websocket instance and declare a handler for incoming messages
 ```
-let socket = new WebSocket("ws://localhost:7890");
+let socket = new WebSocket("ws://goctopus:7890");
 
 socket.onmessage = function(event) {
   // do something with data that commes from backend
@@ -85,7 +96,7 @@ socket.onmessage = function(event) {
 
 with curl:
 ```
-curl -X POST http://localhost
+curl -X POST http://goctopus:7890
    -H "Content-Type: application/json" 
    -d '{"key":"noreply@google.com","value":{"foo":"bar"},"expire":"30m"}'
    --user "login:password"
@@ -98,9 +109,6 @@ import os
 import json
 import requests
 
-login = os.environ.get("WS_LOGIN")
-password = os.environ.get("WS_PASSWORD")
-
 message = {"key": "noreply@goole.com", "value": {"foo": "bar"}, "expire": "30m"}
-r = requests.post("http://localhost", data=json.dumps(message), auth=(login, password))
+r = requests.post("http://goctopus:7890", data=json.dumps(message), auth=("login", "password"))
 ```
