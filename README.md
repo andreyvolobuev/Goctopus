@@ -94,7 +94,12 @@ socket.onmessage = function(event) {
 ```
 
 
-- backend sends POST-requests with Basic Authentication ([RFC 2617, Section 2](https://www.rfc-editor.org/rfc/rfc2617.html#section-2))
+- backend forms a message to be sent and sends it to Goctopus via POST-requests with Basic Authentication ([RFC 2617, Section 2](https://www.rfc-editor.org/rfc/rfc2617.html#section-2))
+
+Message structure should be as follows:
+- key (REQUIRED): a user identifier, if many users are identified by same key, then message will be sent to all of them. The key itself by which the user was identified will not be sent to user
+- value (REQUIRED): the message that will be sent out to the end user
+- expire (OPTIONAL): if the message was sent out but there was no receiver with the required key connected, then Goctopus will wait for this amout of time before the message will be considered expired and will be removed from send queue. If this parameter is ommited then default value (set by WS_MSG_EXPIRE env variable or --expire flag) will be used
 
 with curl:
 ```
