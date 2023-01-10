@@ -51,7 +51,7 @@ func (r *AuthResponse) Export() []string {
 3. Compile and run the app:
 ```
 go build -o goctopus src/.
-./goctopus --host 0.0.0.0 --port 7890 --workers 1024 --expire 30m --login admin --password password --auth http://localhost/api/v1/is_authenticated --verbose true
+./goctopus --host 0.0.0.0 --port 7890 --workers 1024 --expire 30m --login admin --password mystrongpassword --auth http://localhost/api/v1/is_authenticated --verbose true
 ```
 
 you may also just use Docker:
@@ -62,8 +62,8 @@ docker run \
     -e WS_PORT=7890 \
     -e WS_WORKERS=1024 \
     -e WS_MSG_EXPIRE=30m \
-    -e WS_LOGIN=login \
-    -e WS_PASSWORD=password \
+    -e WS_LOGIN=admin \
+    -e WS_PASSWORD=mystrongpassword \
     -e WS_AUTH_URL=http://localhost/api/v1/is_authenticated \
     -e WS_VERBOSE=1 \
     -p 7890:7890 \
@@ -101,7 +101,7 @@ with curl:
 curl -X POST http://goctopus:7890
    -H "Content-Type: application/json" 
    -d '{"key":"noreply@google.com","value":{"foo":"bar"},"expire":"30m"}'
-   --user "login:password"
+   --user "admin:mystrongpassword"
 ```
 
 
@@ -112,5 +112,5 @@ import json
 import requests
 
 message = {"key": "noreply@goole.com", "value": {"foo": "bar"}, "expire": "30m"}
-r = requests.post("http://goctopus:7890", data=json.dumps(message), auth=("login", "password"))
+r = requests.post("http://goctopus:7890", data=json.dumps(message), auth=("admin", "mystrongpassword"))
 ```
