@@ -55,7 +55,6 @@ func (g *Goctopus) handleWs(w http.ResponseWriter, r *http.Request) {
 			g.NewConn(key, conn)
 			g.SendMessages(key)
 		}
-
 	})
 }
 
@@ -75,7 +74,7 @@ func (g *Goctopus) handlePost(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	m := Message{}
+    m := Message{}
 	if err := m.Unmarshal(r.Body); err != nil {
 		g.Log("%s\n", err)
 		w.WriteHeader(http.StatusBadRequest)

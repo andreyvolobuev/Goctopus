@@ -9,9 +9,11 @@ import (
 )
 
 type Message struct {
+    Id             int
 	Key            string `json:"key"`
 	Value          any    `json:"value"`
 	Expire         string `json:"expire"`
+    IsSent         bool
 	Date           time.Time
 	ExpireDuration time.Duration
 }

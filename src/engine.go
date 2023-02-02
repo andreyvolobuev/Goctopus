@@ -13,8 +13,9 @@ import (
 )
 
 type Goctopus struct {
-	Queue map[string][]Message
-	Conns map[string][]net.Conn
+	Queue   map[string][]Message
+	Conns   map[string][]net.Conn
+    MsgId   int
 
 	AuthHandler func(*http.Request) ([]string, error)
 
@@ -59,58 +60,75 @@ func (g *Goctopus) worker(task func()) {
 }
 
 func (g *Goctopus) SendMessages(key string) {
-	queue := g.Queue[key]
-	conns := g.Conns[key]
+	queue := make([]Message, 0, len(g.Queue[key]))
+	conns := make([]net.Conn, 0, len(g.Conns[key]))
 
-	for i, conn := range conns {
-		for j, msg := range queue {
-			if msg.IsExpired() {
-				g.Log("Message is expired\n")
-				g.Queue[key] = g.removeMessage(queue, j)
-				continue
-			}
+    if len(g.Queue[key]) == 0 {
+        return
+    }
 
-			data, err := msg.Marshal()
-			if err != nil {
-				g.Log("%s. Will discard this message from %s\n", err, key)
-				g.Queue[key] = g.removeMessage(queue, j)
-				continue
-			}
+    if len(g.Conns[key]) == 0 {
+        return
+    }
 
-			err = wsutil.WriteServerMessage(conn, ws.OpText, data)
+    for i, msg := range g.Queue[key] {
+        if msg.IsExpired() {
+            g.Log("Message is expired\n")
+            continue
+        }
+
+        data, err := msg.Marshal()
+        if err != nil {
+            g.Log("%s. Will discard this message from %s\n", err, key)
+            continue
+        }
+
+        for _, conn := range g.Conns[key] {
+            err = g.SendMessage(&conn, data)
 			if err != nil {
 				g.Log("%s. Will remove a conn from %s\n", err, key)
-				g.Conns[key] = g.removeConn(conns, i)
+                conn.Close()
 				continue
 			}
 
-			g.Queue[key] = g.removeMessage(queue, j)
+            if i == len(g.Queue[key])-1 {
+                conns = append(conns, conn)
+            }
+
+            msg.IsSent = true
 		}
+
+        if !msg.IsSent {
+            queue = append(queue, msg)
+        }
 	}
+
+    if len(queue) == 0 {
+        delete(g.Queue, key)
+    } else {
+        g.Queue[key] = queue
+    }
+
+    if len(conns) == 0 {
+        delete(g.Conns, key)
+    } else {
+        g.Conns[key] = conns
+    }
+}
+
+func (g *Goctopus) SendMessage(conn *net.Conn, data []byte) error {
+    err := wsutil.WriteServerMessage(*conn, ws.OpText, data)
+    return err
 }
 
 func (g *Goctopus) QueueMessage(m Message) {
-	queue := g.Queue[m.Key]
-	queue = append(queue, m)
-	g.Queue[m.Key] = queue
-}
-
-func (g *Goctopus) removeMessage(s []Message, i int) []Message {
-	s[i] = s[len(s)-1]
-	return s[:len(s)-1]
+    g.MsgId++
+    m.Id = g.MsgId
+	g.Queue[m.Key] = append(g.Queue[m.Key], m)
 }
 
 func (g *Goctopus) NewConn(key string, conn net.Conn) {
-	conns := g.Conns[key]
-	conns = append(conns, conn)
-	g.Conns[key] = conns
-}
-
-func (g *Goctopus) removeConn(s []net.Conn, i int) []net.Conn {
-	conn := s[i]
-	defer conn.Close()
-	s[i] = s[len(s)-1]
-	return s[:len(s)-1]
+	g.Conns[key] = append(g.Conns[key], conn)
 }
 
 func (g *Goctopus) Log(format string, v ...any) {
