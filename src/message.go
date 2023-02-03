@@ -9,17 +9,19 @@ import (
 )
 
 type Message struct {
-    Id             int
-	Key            string `json:"key"`
-	Value          any    `json:"value"`
-	Expire         string `json:"expire"`
-    IsSent         bool
-	Date           time.Time
-	ExpireDuration time.Duration
+	id     int
+	Key    string `json:"key"`
+	Value  any    `json:"value"`
+	Expire string `json:"expire"`
+	isSent bool
+	date   time.Time
 }
 
 func (m *Message) Marshal() ([]byte, error) {
-	data, err := json.Marshal(m.Value)
+	payload := make(map[string]any)
+	payload["id"] = m.id
+	payload["payload"] = m.Value
+	data, err := json.Marshal(payload)
 	return data, err
 }
 
@@ -46,18 +48,13 @@ func (m *Message) Unmarshal(data io.ReadCloser) error {
 	if m.Expire == "" {
 		m.Expire = os.Getenv("WS_MSG_EXPIRE")
 	}
-	exp, err := time.ParseDuration(m.Expire)
 
-	if err != nil {
-		return err
-	}
-	m.ExpireDuration = exp
-
-	m.Date = time.Now()
+	m.date = time.Now()
 
 	return nil
 }
 
 func (m *Message) IsExpired() bool {
-	return m.ExpireDuration < time.Since(m.Date)
+	exp, _ := time.ParseDuration(m.Expire)
+	return exp < time.Since(m.date)
 }
