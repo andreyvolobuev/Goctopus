@@ -47,7 +47,7 @@ func main() {
 		verboseDefault = "False"
 	}
 	flag.StringVar(&verbose, "verbose", verboseDefault, "Whether or not log everything to console")
-	os.Setenv("WS_VERBOSE", verbose)
+	fmt.Println("AAA", verboseDefault, verbose, os.Getenv("WS_VERBOSE"), "EEEEE")
 
 	flag.Parse()
 
@@ -55,6 +55,7 @@ func main() {
 	os.Setenv("WS_MSG_EXPIRE", expire)
 	os.Setenv("WS_LOGIN", login)
 	os.Setenv("WS_PASSWORD", password)
+	os.Setenv("WS_VERBOSE", verbose)
 
 	if authUrl == "" {
 		panic("You must set URL for authenticating incoming websocket requests. You may do that by setting WS_AUTH_URL environment variable or by running goctopus with --auth flag")
