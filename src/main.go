@@ -47,7 +47,6 @@ func main() {
 		verboseDefault = "False"
 	}
 	flag.StringVar(&verbose, "verbose", verboseDefault, "Whether or not log everything to console")
-	fmt.Println("AAA", verboseDefault, verbose, os.Getenv("WS_VERBOSE"), "EEEEE")
 
 	flag.Parse()
 
