@@ -1,12 +1,7 @@
 package main
 
 import (
-	"encoding/json"
-	"errors"
-	"io"
 	"net/http"
-	"net/url"
-	"os"
 )
 
 // This whole module might be redefined in order to create authorization logic
@@ -43,36 +38,37 @@ func (r *AuthResponse) Export() []string {
 }
 
 func (g *Goctopus) Authorize(r *http.Request) ([]string, error) {
-	AuthURL, err := url.Parse(os.Getenv("WS_AUTH_URL"))
-	if err != nil {
-		g.Log("%s\n", err)
-	}
+	// AuthURL, err := url.Parse(os.Getenv("WS_AUTH_URL"))
+	// if err != nil {
+	// 	g.Log("%s\n", err)
+	// }
 
-	r.URL = AuthURL
-	r.RequestURI = ""
+	// r.URL = AuthURL
+	// r.RequestURI = ""
 
-	client := &http.Client{}
-	resp, err := client.Do(r)
-	if err != nil {
-		g.Log("%s\n", err)
-		return []string{}, err
-	}
+	// client := &http.Client{}
+	// resp, err := client.Do(r)
+	// if err != nil {
+	// 	g.Log("%s\n", err)
+	// 	return []string{}, err
+	// }
 
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		g.Log("%s\n", err)
-		return []string{}, err
-	}
+	// b, err := io.ReadAll(resp.Body)
+	// if err != nil {
+	// 	g.Log("%s\n", err)
+	// 	return []string{}, err
+	// }
 
-	data := AuthResponse{}
-	if err := json.Unmarshal(b, &data); err != nil {
-		g.Log("%s\n", err)
-		return []string{}, err
-	}
+	// data := AuthResponse{}
+	// if err := json.Unmarshal(b, &data); err != nil {
+	// 	g.Log("%s\n", err)
+	// 	return []string{}, err
+	// }
 
-	keys := data.Export()
-	if len(keys) == 0 {
-		return []string{}, errors.New("invalid credentials")
-	}
+	// keys := data.Export()
+	// if len(keys) == 0 {
+	// 	return []string{}, errors.New("invalid credentials")
+	// }
+	keys := []string{"a"}
 	return keys, nil
 }
