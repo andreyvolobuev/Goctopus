@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	host, port, workers, expire, login, password, authUrl, verbose string
+	host, port, workers, expire, login, password, authUrl, verbose, storageEngine string
 )
 
 func main() {
@@ -48,6 +48,12 @@ func main() {
 	}
 	flag.StringVar(&verbose, "verbose", verboseDefault, "Whether or not log everything to console")
 
+	storageDefault, ok := os.LookupEnv("WS_STORAGE")
+	if !ok {
+		storageDefault = "default"
+	}
+	flag.StringVar(&storageEngine, "storage", storageDefault, "Storage engine that is used to keep message queues")
+
 	flag.Parse()
 
 	os.Setenv("WS_WORKERS", workers)
@@ -68,6 +74,7 @@ func main() {
 	fmt.Printf("Goctopus websocket app has started\n")
 	fmt.Printf("Listening to: %s:%s\n", host, port)
 	fmt.Printf("Num workers is: %s\n", os.Getenv("WS_WORKERS"))
+	fmt.Printf("Storage is: %s\n", storageEngine)
 	fmt.Printf("Default message expiry is: %s\n", os.Getenv("WS_MSG_EXPIRE"))
 	fmt.Printf("----------------------------------\n\n")
 

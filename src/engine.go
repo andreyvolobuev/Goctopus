@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -16,7 +17,6 @@ import (
 )
 
 type Goctopus struct {
-	Queue map[string][]Message
 	Conns map[string][]net.Conn
 	MsgId int
 
@@ -24,14 +24,15 @@ type Goctopus struct {
 
 	mu sync.Mutex
 
-	work chan func()
-	sem  chan struct{}
+	work    chan func()
+	sem     chan struct{}
+	storage Storage
 }
 
 func (g *Goctopus) Start() {
 	g.Log("starting Goctopus websocket app...")
 
-	g.Queue = make(map[string][]Message)
+	g.storage = g.getStorage()
 	g.Conns = make(map[string][]net.Conn)
 
 	if g.AuthHandler == nil {
@@ -63,15 +64,25 @@ func (g *Goctopus) worker(task func()) {
 }
 
 func (g *Goctopus) getMsgQueue(key string) []Message {
-	return g.Queue[key]
+	queue, err := g.storage.GetQueue(key)
+	if err != nil {
+		g.Log("%s\n", err)
+	}
+	return queue
 }
 
 func (g *Goctopus) updateMsgQueue(key string, queue []Message) {
-	g.Queue[key] = queue
+	err := g.storage.SetQueue(key, queue)
+	if err != nil {
+		g.Log("%s\n", err)
+	}
 }
 
 func (g *Goctopus) deleteMsgQueue(key string) {
-	delete(g.Queue, key)
+	err := g.storage.DeleteQueue(key)
+	if err != nil {
+		g.Log("%s\n", err)
+	}
 }
 
 func (g *Goctopus) SendMessages(key string) {
@@ -178,7 +189,10 @@ func (g *Goctopus) SendMessage(c net.Conn, d []byte, id int) error {
 func (g *Goctopus) QueueMessage(m Message) {
 	g.MsgId++
 	m.id = g.MsgId
-	g.Queue[m.Key] = append(g.Queue[m.Key], m)
+	err := g.storage.AddMessage(m.Key, m)
+	if err != nil {
+		g.Log("%s\n", err)
+	}
 }
 
 func (g *Goctopus) NewConn(key string, conn net.Conn) {
@@ -194,4 +208,11 @@ func (g *Goctopus) Log(format string, v ...any) {
 	if verbose {
 		log.Printf(format, v...)
 	}
+}
+
+func (g *Goctopus) getStorage() Storage {
+	m := Storages[strings.ToLower(storageEngine)]
+	m.Init()
+	g.Log("Storage %s initialized", storageEngine)
+	return m
 }
