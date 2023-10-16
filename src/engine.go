@@ -62,10 +62,23 @@ func (g *Goctopus) worker(task func()) {
 	}
 }
 
+func (g *Goctopus) getMsgQueue(key string) []Message {
+	return g.Queue[key]
+}
+
+func (g *Goctopus) updateMsgQueue(key string, queue []Message) {
+	g.Queue[key] = queue
+}
+
+func (g *Goctopus) deleteMsgQueue(key string) {
+	delete(g.Queue, key)
+}
+
 func (g *Goctopus) SendMessages(key string) {
 	g.Log("Start sending messages for %s\n", key)
 
-	if len(g.Queue[key]) == 0 {
+	msgQueue := g.getMsgQueue(key)
+	if len(msgQueue) == 0 {
 		g.Log("No messages to send for %s. Return\n", key)
 		return
 	}
@@ -75,10 +88,10 @@ func (g *Goctopus) SendMessages(key string) {
 		return
 	}
 
-	queue := make([]Message, 0, len(g.Queue[key]))
+	queue := make([]Message, 0, len(msgQueue))
 	conns := make([]net.Conn, 0, len(g.Conns[key]))
 
-	for i, msg := range g.Queue[key] {
+	for i, msg := range msgQueue {
 		g.Log("Try sending message id:%d, value: %s to %s", msg.id, msg.Value, key)
 
 		if msg.IsExpired() {
@@ -100,7 +113,7 @@ func (g *Goctopus) SendMessages(key string) {
 				continue
 			}
 
-			if i == len(g.Queue[key])-1 {
+			if i == len(msgQueue)-1 {
 				conns = append(conns, conn)
 			}
 
@@ -113,10 +126,10 @@ func (g *Goctopus) SendMessages(key string) {
 	}
 
 	if l := len(queue); l == 0 {
-		delete(g.Queue, key)
+		g.deleteMsgQueue(key)
 		g.Log("All messages for %s have been sent, the queue is empty", key)
 	} else {
-		g.Queue[key] = queue
+		g.updateMsgQueue(key, queue)
 		g.Log("There are %d unsent messages tha will remain in the queue for %s", l, key)
 	}
 
@@ -170,6 +183,7 @@ func (g *Goctopus) QueueMessage(m Message) {
 
 func (g *Goctopus) NewConn(key string, conn net.Conn) {
 	g.Conns[key] = append(g.Conns[key], conn)
+	g.Log("Saved new connection for %s", key)
 }
 
 func (g *Goctopus) Log(format string, v ...any) {

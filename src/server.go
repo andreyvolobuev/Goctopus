@@ -34,7 +34,7 @@ func (g *Goctopus) handleWs(w http.ResponseWriter, r *http.Request) {
 	keys, err := g.AuthHandler(r)
 
 	if err != nil {
-		g.Log("%s\n", err)
+		g.Log("Authentication failed: %s\n", err)
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
@@ -44,8 +44,6 @@ func (g *Goctopus) handleWs(w http.ResponseWriter, r *http.Request) {
 		g.Log("%s\n", err)
 		return
 	}
-
-	g.Log("New connection for: %s\n", keys)
 
 	g.Schedule(func() {
 		g.mu.Lock()
