@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	host, port, workers, expire, login, password, authUrl, verbose, storageEngine string
+	host, port, workers, expire, login, password, authUrl, verbose, storageEngine, authorizerEngine string
 )
 
 func main() {
@@ -54,6 +54,12 @@ func main() {
 	}
 	flag.StringVar(&storageEngine, "storage", storageDefault, "Storage engine that is used to keep message queues")
 
+	authorizerDefault, ok := os.LookupEnv("WS_STORAGE")
+	if !ok {
+		authorizerDefault = "dummy"
+	}
+	flag.StringVar(&authorizerEngine, "storage", authorizerDefault, "Authorizer engine that is used to authorize incomming http requests")
+
 	flag.Parse()
 
 	os.Setenv("WS_WORKERS", workers)
@@ -75,6 +81,7 @@ func main() {
 	fmt.Printf("Listening to: %s:%s\n", host, port)
 	fmt.Printf("Num workers is: %s\n", os.Getenv("WS_WORKERS"))
 	fmt.Printf("Storage is: %s\n", storageEngine)
+	fmt.Printf("Authorizer engine: %s\n", authorizerEngine)
 	fmt.Printf("Default message expiry is: %s\n", os.Getenv("WS_MSG_EXPIRE"))
 	fmt.Printf("----------------------------------\n\n")
 

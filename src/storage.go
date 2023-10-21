@@ -17,7 +17,10 @@ type Storage interface {
 	// Append message to a queue retrieved by it's key
 }
 
+// map of available storages
+// add your custom storage here:
+var memstorage = MemoryStorage{}
 var Storages = map[string]Storage{
-	"default": &MemoryStorage{},
-	"memory":  &MemoryStorage{},
+	"default": &memstorage,
+	"memory":  &memstorage,
 }

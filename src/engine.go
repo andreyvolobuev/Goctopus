@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log"
 	"net"
-	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -20,24 +19,21 @@ type Goctopus struct {
 	Conns map[string][]net.Conn
 	MsgId int
 
-	AuthHandler func(*http.Request) ([]string, error)
-
 	mu sync.Mutex
 
-	work    chan func()
-	sem     chan struct{}
-	storage Storage
+	work       chan func()
+	sem        chan struct{}
+	storage    Storage
+	authorizer Authorizer
 }
 
 func (g *Goctopus) Start() {
 	g.Log("starting Goctopus websocket app...")
 
 	g.storage = g.getStorage()
-	g.Conns = make(map[string][]net.Conn)
+	g.authorizer = g.getAuthorizer()
 
-	if g.AuthHandler == nil {
-		g.AuthHandler = g.Authorize
-	}
+	g.Conns = make(map[string][]net.Conn)
 
 	n_workers, err := strconv.Atoi(os.Getenv("WS_WORKERS"))
 	if err != nil {
@@ -66,7 +62,7 @@ func (g *Goctopus) worker(task func()) {
 func (g *Goctopus) getMsgQueue(key string) []Message {
 	queue, err := g.storage.GetQueue(key)
 	if err != nil {
-		g.Log("%s\n", err)
+		g.Log("%s", err)
 	}
 	return queue
 }
@@ -74,28 +70,28 @@ func (g *Goctopus) getMsgQueue(key string) []Message {
 func (g *Goctopus) updateMsgQueue(key string, queue []Message) {
 	err := g.storage.SetQueue(key, queue)
 	if err != nil {
-		g.Log("%s\n", err)
+		g.Log("%s", err)
 	}
 }
 
 func (g *Goctopus) deleteMsgQueue(key string) {
 	err := g.storage.DeleteQueue(key)
 	if err != nil {
-		g.Log("%s\n", err)
+		g.Log("%s", err)
 	}
 }
 
 func (g *Goctopus) SendMessages(key string) {
-	g.Log("Start sending messages for %s\n", key)
+	g.Log("Start sending messages for %s", key)
 
 	msgQueue := g.getMsgQueue(key)
 	if len(msgQueue) == 0 {
-		g.Log("No messages to send for %s. Return\n", key)
+		g.Log("No messages to send for %s. Return", key)
 		return
 	}
 
 	if len(g.Conns[key]) == 0 {
-		g.Log("No active connections for %s. Return\n", key)
+		g.Log("No active connections for %s. Return", key)
 		return
 	}
 
@@ -106,20 +102,20 @@ func (g *Goctopus) SendMessages(key string) {
 		g.Log("Try sending message id:%d, value: %s to %s", msg.id, msg.Value, key)
 
 		if msg.IsExpired() {
-			g.Log("Message id:%d is expired and will be discarted\n", msg.id)
+			g.Log("Message id:%d is expired and will be discarted", msg.id)
 			continue
 		}
 
 		data, err := msg.Marshal()
 		if err != nil {
-			g.Log("%s. Will discard this message from queue for %s\n", err, key)
+			g.Log("%s. Will discard this message from queue for %s", err, key)
 			continue
 		}
 
 		for _, conn := range g.Conns[key] {
 			err = g.SendMessage(conn, data, msg.id)
 			if err != nil {
-				g.Log("%s. Will remove a conn from %s\n", err, key)
+				g.Log("%s. Will remove a conn from %s", err, key)
 				conn.Close()
 				continue
 			}
@@ -191,7 +187,7 @@ func (g *Goctopus) QueueMessage(m Message) {
 	m.id = g.MsgId
 	err := g.storage.AddMessage(m.Key, m)
 	if err != nil {
-		g.Log("%s\n", err)
+		g.Log("%s", err)
 	}
 }
 
@@ -206,7 +202,7 @@ func (g *Goctopus) Log(format string, v ...any) {
 		verbose = false
 	}
 	if verbose {
-		log.Printf(format, v...)
+		log.Printf(format+"\n", v...)
 	}
 }
 
@@ -215,4 +211,10 @@ func (g *Goctopus) getStorage() Storage {
 	m.Init()
 	g.Log("Storage %s initialized", storageEngine)
 	return m
+}
+
+func (g *Goctopus) getAuthorizer() Authorizer {
+	a := Authorizers[strings.ToLower(authorizerEngine)]
+	g.Log("Authorizer %s will be used", storageEngine)
+	return a
 }

@@ -31,17 +31,17 @@ func (g *Goctopus) handleHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (g *Goctopus) handleWs(w http.ResponseWriter, r *http.Request) {
-	keys, err := g.AuthHandler(r)
+	keys, err := g.authorizer.Authorize(g, r)
 
 	if err != nil {
-		g.Log("Authentication failed: %s\n", err)
+		g.Log("Authentication failed: %s", err)
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 
 	conn, _, _, err := ws.UpgradeHTTP(r, w)
 	if err != nil {
-		g.Log("%s\n", err)
+		g.Log("%s", err)
 		return
 	}
 
@@ -60,13 +60,13 @@ func (g *Goctopus) handlePost(w http.ResponseWriter, r *http.Request) {
 	if os.Getenv("WS_LOGIN") != "" && os.Getenv("WS_PASSWORD") != "" {
 		username, password, ok := r.BasicAuth()
 		if !ok {
-			g.Log("Credentials for POST-request not provided!\n")
+			g.Log("Credentials for POST-request not provided!")
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 
 		if username != os.Getenv("WS_LOGIN") || password != os.Getenv("WS_PASSWORD") {
-			g.Log("POST-request with bad credentials\n")
+			g.Log("POST-request with bad credentials")
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
@@ -74,12 +74,12 @@ func (g *Goctopus) handlePost(w http.ResponseWriter, r *http.Request) {
 
 	m := Message{}
 	if err := m.Unmarshal(r.Body); err != nil {
-		g.Log("%s\n", err)
+		g.Log("%s", err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	g.Log("New message for %s (expires in: %s)\n", m.Key, m.Expire)
+	g.Log("New message for %s (expires in: %s)", m.Key, m.Expire)
 
 	g.Schedule(func() {
 		g.mu.Lock()

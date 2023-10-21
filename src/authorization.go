@@ -4,6 +4,10 @@ import (
 	"net/http"
 )
 
+type Authorizer interface {
+	Authorize(*Goctopus, *http.Request) ([]string, error)
+}
+
 // This whole module might be redefined in order to create authorization logic
 // that you actually need in your own project.
 //
@@ -40,7 +44,7 @@ func (r *AuthResponse) Export() []string {
 func (g *Goctopus) Authorize(r *http.Request) ([]string, error) {
 	// AuthURL, err := url.Parse(os.Getenv("WS_AUTH_URL"))
 	// if err != nil {
-	// 	g.Log("%s\n", err)
+	// 	g.Log("%s", err)
 	// }
 
 	// r.URL = AuthURL
@@ -49,19 +53,19 @@ func (g *Goctopus) Authorize(r *http.Request) ([]string, error) {
 	// client := &http.Client{}
 	// resp, err := client.Do(r)
 	// if err != nil {
-	// 	g.Log("%s\n", err)
+	// 	g.Log("%s", err)
 	// 	return []string{}, err
 	// }
 
 	// b, err := io.ReadAll(resp.Body)
 	// if err != nil {
-	// 	g.Log("%s\n", err)
+	// 	g.Log("%s", err)
 	// 	return []string{}, err
 	// }
 
 	// data := AuthResponse{}
 	// if err := json.Unmarshal(b, &data); err != nil {
-	// 	g.Log("%s\n", err)
+	// 	g.Log("%s", err)
 	// 	return []string{}, err
 	// }
 
@@ -71,4 +75,10 @@ func (g *Goctopus) Authorize(r *http.Request) ([]string, error) {
 	// }
 	keys := []string{"a"}
 	return keys, nil
+}
+
+var dummy = DummyAuthorizer{keys: []string{"test"}}
+var Authorizers = map[string]Authorizer{
+	"dummy":   &dummy,
+	"default": &dummy,
 }
