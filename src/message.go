@@ -6,10 +6,12 @@ import (
 	"io"
 	"os"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type Message struct {
-	id     int
+	id     uuid.UUID
 	Key    string `json:"key"`
 	Value  any    `json:"value"`
 	Expire string `json:"expire"`

@@ -58,7 +58,7 @@ func main() {
 	if !ok {
 		authorizerDefault = "dummy"
 	}
-	flag.StringVar(&authorizerEngine, "storage", authorizerDefault, "Authorizer engine that is used to authorize incomming http requests")
+	flag.StringVar(&authorizerEngine, "authorizer", authorizerDefault, "Authorizer engine that is used to authorize incomming http requests")
 
 	flag.Parse()
 

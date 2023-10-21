@@ -13,11 +13,11 @@ import (
 
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
+	"github.com/google/uuid"
 )
 
 type Goctopus struct {
 	Conns map[string][]net.Conn
-	MsgId int
 
 	mu sync.Mutex
 
@@ -99,7 +99,7 @@ func (g *Goctopus) SendMessages(key string) {
 	conns := make([]net.Conn, 0, len(g.Conns[key]))
 
 	for i, msg := range msgQueue {
-		g.Log("Try sending message id:%d, value: %s to %s", msg.id, msg.Value, key)
+		g.Log("Try sending message id: %s, value: %s, to %s", msg.id, msg.Value, key)
 
 		if msg.IsExpired() {
 			g.Log("Message id:%d is expired and will be discarted", msg.id)
@@ -149,7 +149,7 @@ func (g *Goctopus) SendMessages(key string) {
 	}
 }
 
-func (g *Goctopus) SendMessage(c net.Conn, d []byte, id int) error {
+func (g *Goctopus) SendMessage(c net.Conn, d []byte, id uuid.UUID) error {
 	if err := wsutil.WriteServerMessage(c, ws.OpText, d); err != nil {
 		return err
 	}
@@ -169,13 +169,16 @@ func (g *Goctopus) SendMessage(c net.Conn, d []byte, id int) error {
 		return err
 	}
 
-	id_, ok := data["id"].(float64)
+	id_, ok := data["id"].(string)
 	if !ok {
-		return errors.New("wrong message id type")
+		return errors.New("could not convert message id to bytes")
 	}
-
-	if id != int(id_) {
-		g.Log("received confirmation for wrong id (expected for %d, got for %d)", id, int(id_))
+	received_uuid, err := uuid.Parse(id_)
+	if err != nil {
+		return errors.New("could not convert message id to uuid")
+	}
+	if id != received_uuid {
+		g.Log("received confirmation for wrong id (expected for %s, got for %s)", id, received_uuid)
 		return errors.New("received confirmation for wrong id")
 	}
 
@@ -183,11 +186,16 @@ func (g *Goctopus) SendMessage(c net.Conn, d []byte, id int) error {
 }
 
 func (g *Goctopus) QueueMessage(m Message) {
-	g.MsgId++
-	m.id = g.MsgId
-	err := g.storage.AddMessage(m.Key, m)
+	new_uuid, err := uuid.NewRandom()
 	if err != nil {
 		g.Log("%s", err)
+		return
+	}
+	m.id = new_uuid
+	err = g.storage.AddMessage(m.Key, m)
+	if err != nil {
+		g.Log("%s", err)
+		return
 	}
 }
 
@@ -215,6 +223,6 @@ func (g *Goctopus) getStorage() Storage {
 
 func (g *Goctopus) getAuthorizer() Authorizer {
 	a := Authorizers[strings.ToLower(authorizerEngine)]
-	g.Log("Authorizer %s will be used", storageEngine)
+	g.Log("Authorizer %s will be used", authorizerEngine)
 	return a
 }
