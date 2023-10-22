@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 
@@ -101,21 +102,21 @@ func (g *Goctopus) handleGet(w http.ResponseWriter, r *http.Request) {
 	key := r.URL.Query().Get("key")
 	var data []byte
 	if key == "" {
+		g.Log("[GET] list of all available keys in storage")
 		b, err := g.getMarshalledKeys()
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 		data = b
-		g.Log("reqest to get list of all available keys")
 	} else {
+		g.Log("[GET] list of messages from key: %s", key)
 		b, err := g.getMarshalledMessages(key)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 		data = b
-		g.Log("request to get list of messages for key: %s", key)
 	}
 	w.Write(data)
 }
@@ -123,6 +124,23 @@ func (g *Goctopus) handleGet(w http.ResponseWriter, r *http.Request) {
 func (g *Goctopus) handleDelete(w http.ResponseWriter, r *http.Request) {
 	key := r.URL.Query().Get("key")
 	id_ := r.URL.Query().Get("id")
+
+	// write correct and pretty log message for incomming request
+	m := "message"
+	if key == "" && id_ == "" {
+		m = "all " + m + "s in storage"
+	} else {
+		if id_ == "" {
+			m = fmt.Sprintf("all " + m + "s")
+		} else {
+			m = fmt.Sprintf(m+" with id: %s", id_)
+		}
+		if key != "" {
+			m = fmt.Sprintf(m+" from key: %s", key)
+		}
+	}
+	g.Log("[DELETE] " + m)
+
 	if id_ != "" && key == "" {
 		g.Log("can not handle delete request where message id %s is provided, but key is not.", id_)
 		w.WriteHeader(http.StatusBadRequest)
@@ -141,7 +159,7 @@ func (g *Goctopus) handleDelete(w http.ResponseWriter, r *http.Request) {
 	} else {
 		if id_ == "" {
 			g.deleteMsgQueue(key)
-			g.Log("deleted all messages for key: %s", key)
+			g.Log("deleted all messages from key: %s", key)
 		} else {
 			id, err := uuid.Parse(id_)
 			if err != nil {
@@ -163,7 +181,7 @@ func (g *Goctopus) handleDelete(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 			}
-			g.Log("deleted message with id: %s, for key: %s", id, key)
+			g.Log("deleted message with id: %s, from key: %s", id, key)
 		}
 	}
 }
