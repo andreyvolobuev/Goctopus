@@ -36,7 +36,7 @@ func (g *Goctopus) Start() {
 
 	g.Conns = make(map[string][]net.Conn)
 
-	n_workers, err := strconv.Atoi(os.Getenv("WS_WORKERS"))
+	n_workers, err := strconv.Atoi(os.Getenv(WS_WORKERS))
 	if err != nil {
 		panic(WS_WORKERS_NOT_FOUND)
 	}
@@ -206,7 +206,7 @@ func (g *Goctopus) newConn(key string, conn net.Conn) {
 }
 
 func (g *Goctopus) Log(format string, v ...any) {
-	verbose, err := strconv.ParseBool(os.Getenv("WS_VERBOSE"))
+	verbose, err := strconv.ParseBool(os.Getenv(WS_VERBOSE))
 	if err != nil {
 		verbose = false
 	}

@@ -11,16 +11,16 @@ import (
 
 func (g *Goctopus) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
-	case "/":
+	case ROOT:
 		g.handleHTTP(w, r)
 
-	case "/ws", "/ws/":
+	case WS, WS_:
 		g.handleWs(w, r)
 	}
 }
 
 func (g *Goctopus) handleHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(CONTENT_TYPE, APPLICATION_JSON)
 
 	switch r.Method {
 	case http.MethodPost:
@@ -65,7 +65,7 @@ func (g *Goctopus) handleWs(w http.ResponseWriter, r *http.Request) {
 func (g *Goctopus) handlePost(w http.ResponseWriter, r *http.Request) {
 	g.Log(POST_NEW_MSG)
 
-	if os.Getenv("WS_LOGIN") != NULL && os.Getenv("WS_PASSWORD") != NULL {
+	if os.Getenv(WS_LOGIN) != NULL && os.Getenv(WS_PASSWORD) != NULL {
 		username, password, ok := r.BasicAuth()
 		if !ok {
 			g.Log(NO_CREDS_FOR_POST)
@@ -73,7 +73,7 @@ func (g *Goctopus) handlePost(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if username != os.Getenv("WS_LOGIN") || password != os.Getenv("WS_PASSWORD") {
+		if username != os.Getenv(WS_LOGIN) || password != os.Getenv(WS_PASSWORD) {
 			g.Log(BAD_CREDS_FOR_POST)
 			w.WriteHeader(http.StatusForbidden)
 			return
@@ -101,7 +101,7 @@ func (g *Goctopus) handlePost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (g *Goctopus) handleGet(w http.ResponseWriter, r *http.Request) {
-	key := r.URL.Query().Get("key")
+	key := r.URL.Query().Get(KEY)
 	var data []byte
 	if key == NULL {
 		g.Log(GET_ALL_MSGS)
@@ -124,24 +124,24 @@ func (g *Goctopus) handleGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (g *Goctopus) handleDelete(w http.ResponseWriter, r *http.Request) {
-	key := r.URL.Query().Get("key")
-	id_ := r.URL.Query().Get("id")
+	key := r.URL.Query().Get(KEY)
+	id_ := r.URL.Query().Get(ID)
 
 	// write correct and pretty log message for incomming request
-	m := "message"
+	m := MESSAGE
 	if key == NULL && id_ == NULL {
-		m = "all " + m + "s in storage"
+		m = ALL + m + MULTIPLE + IN_STORAGE
 	} else {
 		if id_ == NULL {
-			m = fmt.Sprintf("all " + m + "s")
+			m = fmt.Sprintf(ALL + m + MULTIPLE)
 		} else {
-			m = fmt.Sprintf(m+" with id: %s", id_)
+			m = fmt.Sprintf(m+WITH_ID, id_)
 		}
 		if key != NULL {
-			m = fmt.Sprintf(m+" from key: %s", key)
+			m = fmt.Sprintf(m+FROM_KEY, key)
 		}
 	}
-	g.Log("[DELETE] " + m)
+	g.Log(DELETE_METHOD + m)
 
 	if id_ != NULL && key == NULL {
 		g.Log(ID_BUT_NO_KEY_ERR, id_)

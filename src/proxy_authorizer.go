@@ -64,7 +64,7 @@ func (a *ProxyAuthorizer) Authorize(g *Goctopus, r *http.Request) ([]string, err
 }
 
 func (a *ProxyAuthorizer) Init() error {
-	AuthURL, err := url.Parse(os.Getenv("WS_AUTH_URL"))
+	AuthURL, err := url.Parse(os.Getenv(WS_AUTH_URL))
 	if err != nil {
 		return err
 	}

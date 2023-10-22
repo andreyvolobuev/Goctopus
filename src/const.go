@@ -36,13 +36,46 @@ const (
 	STORAGE_INITIALIZED      = "Storage %s initialized"
 	AUTHORIZER_INITIALIZED   = "Authorizer %s will be used"
 	LIST_KEYS_ERR            = "could not get list of keys for %s"
-	BYTES                    = "bytes"
-	UUID                     = "uuid"
 	INVALID_KEY              = "invalid message key"
 	INVALID_VALUE            = "invalid message value"
-	DEFAULT                  = "default"
-	MEMORY                   = "memory"
-	DUMMY                    = "dummy"
-	PROXY                    = "proxy"
-	NULL                     = ""
+	MESSAGE                  = "message"
+	MULTIPLE                 = "s"
+	ALL                      = "all "
+	IN_STORAGE               = " in storage"
+	WITH_ID                  = " with id: %s"
+	FROM_KEY                 = " from key: %s"
+	DELETE_METHOD            = "[DELETE] "
+
+	// literals
+	BYTES   = "bytes"
+	UUID    = "uuid"
+	DEFAULT = "default"
+	MEMORY  = "memory"
+	DUMMY   = "dummy"
+	PROXY   = "proxy"
+	NULL    = ""
+
+	// environments variable names
+	WS_WORKERS    = "WS_WORKERS"
+	WS_VERBOSE    = "WS_VERBOSE"
+	WS_HOST       = "WS_HOST"
+	WS_PORT       = "WS_PORT"
+	WS_MSG_EXPIRE = "WS_MSG_EXPIRE"
+	WS_STORAGE    = "WS_STORAGE"
+	WS_LOGIN      = "WS_LOGIN"
+	WS_PASSWORD   = "WS_PASSWORD"
+	WS_AUTH_URL   = "WS_AUTH_URL"
+
+	// query parameters
+	KEY = "key"
+	ID  = "id"
+
+	// routes
+	ROOT = "/"
+	WS   = "/ws"
+	WS_  = "/ws/"
+
+	// headers
+	CONTENT_TYPE     = "Content-Type"
+	APPLICATION_JSON = "application/json"
 )

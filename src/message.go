@@ -58,7 +58,7 @@ func (m *Message) unmarshal(data io.ReadCloser) error {
 	}
 
 	if m.Expire == NULL {
-		m.Expire = os.Getenv("WS_MSG_EXPIRE")
+		m.Expire = os.Getenv(WS_MSG_EXPIRE)
 	}
 
 	m.date = time.Now()
