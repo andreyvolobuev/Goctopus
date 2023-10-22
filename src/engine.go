@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net"
 	"os"
@@ -59,19 +60,22 @@ func (g *Goctopus) worker(task func()) {
 	}
 }
 
-func (g *Goctopus) getMsgQueue(key string) []Message {
+func (g *Goctopus) getMsgQueue(key string) ([]Message, error) {
 	queue, err := g.storage.GetQueue(key)
 	if err != nil {
 		g.Log("%s", err)
+		return nil, err
 	}
-	return queue
+	return queue, nil
 }
 
-func (g *Goctopus) updateMsgQueue(key string, queue []Message) {
+func (g *Goctopus) updateMsgQueue(key string, queue []Message) error {
 	err := g.storage.SetQueue(key, queue)
 	if err != nil {
 		g.Log("%s", err)
+		return err
 	}
+	return nil
 }
 
 func (g *Goctopus) deleteMsgQueue(key string) {
@@ -84,14 +88,19 @@ func (g *Goctopus) deleteMsgQueue(key string) {
 func (g *Goctopus) SendMessages(key string) {
 	g.Log("Start sending messages for %s", key)
 
-	msgQueue := g.getMsgQueue(key)
-	if len(msgQueue) == 0 {
-		g.Log("No messages to send for %s. Return", key)
+	if len(g.Conns[key]) == 0 {
+		g.Log("No active connections for %s. Return", key)
 		return
 	}
 
-	if len(g.Conns[key]) == 0 {
-		g.Log("No active connections for %s. Return", key)
+	msgQueue, err := g.getMsgQueue(key)
+	if err != nil {
+		g.Log("Could not get messages for %s. Return", key)
+		return
+	}
+
+	if len(msgQueue) == 0 {
+		g.Log("No messages to send for %s. Return", key)
 		return
 	}
 
@@ -106,7 +115,7 @@ func (g *Goctopus) SendMessages(key string) {
 			continue
 		}
 
-		data, err := msg.Marshal()
+		data, err := msg.Marshal(false)
 		if err != nil {
 			g.Log("%s. Will discard this message from queue for %s", err, key)
 			continue
@@ -225,4 +234,38 @@ func (g *Goctopus) getAuthorizer() Authorizer {
 	a := Authorizers[strings.ToLower(authorizerEngine)]
 	g.Log("Authorizer %s will be used", authorizerEngine)
 	return a
+}
+
+func (g *Goctopus) GetMarshalledKeys() ([]byte, error) {
+	keys, err := g.storage.GetKeys()
+	if err != nil {
+		g.Log("%s", err)
+		return nil, errors.New("could not get list of all available keys")
+	}
+	data, err := json.Marshal(keys)
+	if err != nil {
+		g.Log("%s", err)
+		return nil, errors.New("could not marshal list of all available keys")
+	}
+	return data, nil
+}
+
+func (g *Goctopus) GetMarshalledMessages(key string) ([]byte, error) {
+	q, err := g.getMsgQueue(key)
+	if err != nil {
+		m := fmt.Sprintf("could not get list of keys for %s", key)
+		g.Log("%s", m)
+		return nil, errors.New(m)
+	}
+	maps := make([]map[string]any, len(q))
+	for i, m := range q {
+		maps[i] = m.ToMap(true)
+	}
+	queue, err := json.Marshal(maps)
+	if err != nil {
+		m := fmt.Sprintf("could not marshal messages for %s", key)
+		g.Log("%s", m)
+		return nil, errors.New(m)
+	}
+	return queue, err
 }

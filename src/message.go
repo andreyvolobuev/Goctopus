@@ -19,10 +19,20 @@ type Message struct {
 	date   time.Time
 }
 
-func (m *Message) Marshal() ([]byte, error) {
+func (m *Message) ToMap(extended bool) map[string]any {
 	payload := make(map[string]any)
 	payload["id"] = m.id
 	payload["payload"] = m.Value
+	if extended {
+		payload["key"] = m.Key
+		payload["exp"] = m.Expire
+		payload["date"] = m.date
+	}
+	return payload
+}
+
+func (m *Message) Marshal(extended bool) ([]byte, error) {
+	payload := m.ToMap(extended)
 	data, err := json.Marshal(payload)
 	return data, err
 }

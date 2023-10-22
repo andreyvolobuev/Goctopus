@@ -32,3 +32,13 @@ func (s *MemoryStorage) AddMessage(key string, m Message) error {
 	s.storage[m.Key] = append(s.storage[key], m)
 	return nil
 }
+
+func (s *MemoryStorage) GetKeys() ([]string, error) {
+	keys := make([]string, len(s.storage))
+	i := 0
+	for k := range s.storage {
+		keys[i] = k
+		i++
+	}
+	return keys, nil
+}

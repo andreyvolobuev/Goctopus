@@ -15,6 +15,9 @@ type Storage interface {
 
 	AddMessage(string, Message) error
 	// Append message to a queue retrieved by it's key
+
+	GetKeys() ([]string, error)
+	// Return list of all available keys
 }
 
 // map of available storages
