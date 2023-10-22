@@ -263,9 +263,6 @@ func (g *Goctopus) getMarshalledMessages(key string) ([]byte, error) {
 	}
 
 	g.schedule(func() {
-		g.mu.Lock()
-		defer g.mu.Unlock()
-
 		for _, m := range exp {
 			g.Log(MSG_EXPIRED, m.id)
 			g.deleteMsgById(key, m.id)
@@ -282,6 +279,9 @@ func (g *Goctopus) getMarshalledMessages(key string) ([]byte, error) {
 }
 
 func (g *Goctopus) deleteMsgById(key string, id uuid.UUID) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
 	queue, err := g.getMsgQueue(key)
 	if err != nil {
 		return err

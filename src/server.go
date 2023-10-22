@@ -101,8 +101,10 @@ func (g *Goctopus) handlePost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (g *Goctopus) handleGet(w http.ResponseWriter, r *http.Request) {
+	defer g.mu.Unlock()
 	key := r.URL.Query().Get(KEY)
 	var data []byte
+	g.mu.Lock()
 	if key == NULL {
 		g.Log(GET_ALL_MSGS)
 		b, err := g.getMarshalledKeys()
@@ -124,6 +126,7 @@ func (g *Goctopus) handleGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (g *Goctopus) handleDelete(w http.ResponseWriter, r *http.Request) {
+	defer g.mu.Unlock()
 	key := r.URL.Query().Get(KEY)
 	id_ := r.URL.Query().Get(ID)
 
@@ -148,6 +151,8 @@ func (g *Goctopus) handleDelete(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+
+	g.mu.Lock()
 	if key == NULL {
 		keys, err := g.storage.GetKeys()
 		if err != nil {
