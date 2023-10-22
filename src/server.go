@@ -65,7 +65,7 @@ func (g *Goctopus) handleWs(w http.ResponseWriter, r *http.Request) {
 func (g *Goctopus) handlePost(w http.ResponseWriter, r *http.Request) {
 	g.Log(POST_NEW_MSG)
 
-	if os.Getenv(WS_LOGIN) != NULL && os.Getenv(WS_PASSWORD) != NULL {
+	if os.Getenv(WS_LOGIN) != EMPTY_STR && os.Getenv(WS_PASSWORD) != EMPTY_STR {
 		username, password, ok := r.BasicAuth()
 		if !ok {
 			g.Log(NO_CREDS_FOR_POST)
@@ -105,7 +105,7 @@ func (g *Goctopus) handleGet(w http.ResponseWriter, r *http.Request) {
 	key := r.URL.Query().Get(KEY)
 	var data []byte
 	g.mu.Lock()
-	if key == NULL {
+	if key == EMPTY_STR {
 		g.Log(GET_ALL_MSGS)
 		b, err := g.getMarshalledKeys()
 		if err != nil {
@@ -132,28 +132,28 @@ func (g *Goctopus) handleDelete(w http.ResponseWriter, r *http.Request) {
 
 	// write correct and pretty log message for incomming request
 	m := MESSAGE
-	if key == NULL && id_ == NULL {
+	if key == EMPTY_STR && id_ == EMPTY_STR {
 		m = ALL + m + MULTIPLE + IN_STORAGE
 	} else {
-		if id_ == NULL {
+		if id_ == EMPTY_STR {
 			m = fmt.Sprintf(ALL + m + MULTIPLE)
 		} else {
 			m = fmt.Sprintf(m+WITH_ID, id_)
 		}
-		if key != NULL {
+		if key != EMPTY_STR {
 			m = fmt.Sprintf(m+FROM_KEY, key)
 		}
 	}
 	g.Log(DELETE_METHOD + m)
 
-	if id_ != NULL && key == NULL {
+	if id_ != EMPTY_STR && key == EMPTY_STR {
 		g.Log(ID_BUT_NO_KEY_ERR, id_)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	g.mu.Lock()
-	if key == NULL {
+	if key == EMPTY_STR {
 		keys, err := g.storage.GetKeys()
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
@@ -164,7 +164,7 @@ func (g *Goctopus) handleDelete(w http.ResponseWriter, r *http.Request) {
 		}
 		g.Log(ALL_DELETED)
 	} else {
-		if id_ == NULL {
+		if id_ == EMPTY_STR {
 			g.deleteMsgQueue(key)
 			g.Log(ALL_DELETED_FROM_KEY, key)
 		} else {
