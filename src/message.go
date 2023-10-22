@@ -19,7 +19,7 @@ type Message struct {
 	date   time.Time
 }
 
-func (m *Message) ToMap(extended bool) map[string]any {
+func (m *Message) toMap(extended bool) map[string]any {
 	payload := make(map[string]any)
 	payload["id"] = m.id
 	payload["payload"] = m.Value
@@ -31,13 +31,13 @@ func (m *Message) ToMap(extended bool) map[string]any {
 	return payload
 }
 
-func (m *Message) Marshal(extended bool) ([]byte, error) {
-	payload := m.ToMap(extended)
+func (m *Message) marshal(extended bool) ([]byte, error) {
+	payload := m.toMap(extended)
 	data, err := json.Marshal(payload)
 	return data, err
 }
 
-func (m *Message) Unmarshal(data io.ReadCloser) error {
+func (m *Message) unmarshal(data io.ReadCloser) error {
 	defer data.Close()
 
 	b, err := io.ReadAll(data)
@@ -66,7 +66,7 @@ func (m *Message) Unmarshal(data io.ReadCloser) error {
 	return nil
 }
 
-func (m *Message) IsExpired() bool {
+func (m *Message) isExpired() bool {
 	exp, _ := time.ParseDuration(m.Expire)
 	return exp < time.Since(m.date)
 }

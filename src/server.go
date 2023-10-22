@@ -50,13 +50,13 @@ func (g *Goctopus) handleWs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	g.Schedule(func() {
+	g.schedule(func() {
 		g.mu.Lock()
 		defer g.mu.Unlock()
 
 		for _, key := range keys {
-			g.NewConn(key, conn)
-			g.SendMessages(key)
+			g.newConn(key, conn)
+			g.sendMessages(key)
 		}
 	})
 }
@@ -78,7 +78,7 @@ func (g *Goctopus) handlePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	m := Message{}
-	if err := m.Unmarshal(r.Body); err != nil {
+	if err := m.unmarshal(r.Body); err != nil {
 		g.Log("%s", err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -86,12 +86,12 @@ func (g *Goctopus) handlePost(w http.ResponseWriter, r *http.Request) {
 
 	g.Log("New message for %s (expires in: %s)", m.Key, m.Expire)
 
-	g.Schedule(func() {
+	g.schedule(func() {
 		g.mu.Lock()
 		defer g.mu.Unlock()
 
-		g.QueueMessage(m)
-		g.SendMessages(m.Key)
+		g.queueMessage(m)
+		g.sendMessages(m.Key)
 	})
 
 	w.WriteHeader(http.StatusAccepted)
@@ -101,7 +101,7 @@ func (g *Goctopus) handleGet(w http.ResponseWriter, r *http.Request) {
 	key := r.URL.Query().Get("key")
 	var data []byte
 	if key == "" {
-		b, err := g.GetMarshalledKeys()
+		b, err := g.getMarshalledKeys()
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
@@ -109,7 +109,7 @@ func (g *Goctopus) handleGet(w http.ResponseWriter, r *http.Request) {
 		data = b
 		g.Log("reqest to get list of all available keys")
 	} else {
-		b, err := g.GetMarshalledMessages(key)
+		b, err := g.getMarshalledMessages(key)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return

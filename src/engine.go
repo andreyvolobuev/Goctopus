@@ -44,7 +44,7 @@ func (g *Goctopus) Start() {
 	g.work = make(chan func())
 }
 
-func (g *Goctopus) Schedule(task func()) {
+func (g *Goctopus) schedule(task func()) {
 	select {
 	case g.work <- task:
 	case g.sem <- struct{}{}:
@@ -85,7 +85,7 @@ func (g *Goctopus) deleteMsgQueue(key string) {
 	}
 }
 
-func (g *Goctopus) SendMessages(key string) {
+func (g *Goctopus) sendMessages(key string) {
 	g.Log("Start sending messages for %s", key)
 
 	if len(g.Conns[key]) == 0 {
@@ -110,19 +110,19 @@ func (g *Goctopus) SendMessages(key string) {
 	for i, msg := range msgQueue {
 		g.Log("Try sending message id: %s, value: %s, to %s", msg.id, msg.Value, key)
 
-		if msg.IsExpired() {
+		if msg.isExpired() {
 			g.Log("Message id:%d is expired and will be discarted", msg.id)
 			continue
 		}
 
-		data, err := msg.Marshal(false)
+		data, err := msg.marshal(false)
 		if err != nil {
 			g.Log("%s. Will discard this message from queue for %s", err, key)
 			continue
 		}
 
 		for _, conn := range g.Conns[key] {
-			err = g.SendMessage(conn, data, msg.id)
+			err = g.sendMessage(conn, data, msg.id)
 			if err != nil {
 				g.Log("%s. Will remove a conn from %s", err, key)
 				conn.Close()
@@ -158,7 +158,7 @@ func (g *Goctopus) SendMessages(key string) {
 	}
 }
 
-func (g *Goctopus) SendMessage(c net.Conn, d []byte, id uuid.UUID) error {
+func (g *Goctopus) sendMessage(c net.Conn, d []byte, id uuid.UUID) error {
 	if err := wsutil.WriteServerMessage(c, ws.OpText, d); err != nil {
 		return err
 	}
@@ -194,7 +194,7 @@ func (g *Goctopus) SendMessage(c net.Conn, d []byte, id uuid.UUID) error {
 	return nil
 }
 
-func (g *Goctopus) QueueMessage(m Message) {
+func (g *Goctopus) queueMessage(m Message) {
 	new_uuid, err := uuid.NewRandom()
 	if err != nil {
 		g.Log("%s", err)
@@ -208,7 +208,7 @@ func (g *Goctopus) QueueMessage(m Message) {
 	}
 }
 
-func (g *Goctopus) NewConn(key string, conn net.Conn) {
+func (g *Goctopus) newConn(key string, conn net.Conn) {
 	g.Conns[key] = append(g.Conns[key], conn)
 	g.Log("Saved new connection for %s", key)
 }
@@ -236,7 +236,7 @@ func (g *Goctopus) getAuthorizer() Authorizer {
 	return a
 }
 
-func (g *Goctopus) GetMarshalledKeys() ([]byte, error) {
+func (g *Goctopus) getMarshalledKeys() ([]byte, error) {
 	keys, err := g.storage.GetKeys()
 	if err != nil {
 		g.Log("%s", err)
@@ -250,7 +250,7 @@ func (g *Goctopus) GetMarshalledKeys() ([]byte, error) {
 	return data, nil
 }
 
-func (g *Goctopus) GetMarshalledMessages(key string) ([]byte, error) {
+func (g *Goctopus) getMarshalledMessages(key string) ([]byte, error) {
 	q, err := g.getMsgQueue(key)
 	if err != nil {
 		m := fmt.Sprintf("could not get list of keys for %s", key)
@@ -259,7 +259,7 @@ func (g *Goctopus) GetMarshalledMessages(key string) ([]byte, error) {
 	}
 	maps := make([]map[string]any, len(q))
 	for i, m := range q {
-		maps[i] = m.ToMap(true)
+		maps[i] = m.toMap(true)
 	}
 	queue, err := json.Marshal(maps)
 	if err != nil {
