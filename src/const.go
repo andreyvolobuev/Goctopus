@@ -1,5 +1,6 @@
 package main
 
+// TODO: REFACTOR ALL OF THESE CONSTANTS. SOME MIGHT BE JOINED
 const (
 	ERR_TEMPLATE             = "%s"
 	AUTH_FAILED              = "Authentication failed: %s"

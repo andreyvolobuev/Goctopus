@@ -13,6 +13,8 @@ var (
 )
 
 func main() {
+	// TODO: MOVE ALL OF THESE LITERALS TO CONSTANTS
+
 	hostDefault, ok := os.LookupEnv(WS_HOST)
 	if !ok {
 		hostDefault = "0.0.0.0"
