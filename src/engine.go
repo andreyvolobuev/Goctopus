@@ -224,6 +224,7 @@ func (g *Goctopus) getStorage() Storage {
 
 func (g *Goctopus) getAuthorizer() Authorizer {
 	a := Authorizers[strings.ToLower(authorizerEngine)]
+	a.Init()
 	g.Log(AUTHORIZER_INITIALIZED, authorizerEngine)
 	return a
 }

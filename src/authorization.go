@@ -6,6 +6,7 @@ import (
 
 type Authorizer interface {
 	Authorize(*Goctopus, *http.Request) ([]string, error)
+	Init() error
 }
 
 // This whole module might be redefined in order to create authorization logic
@@ -77,7 +78,7 @@ func (g *Goctopus) Authorize(r *http.Request) ([]string, error) {
 	return keys, nil
 }
 
-var dummy = DummyAuthorizer{keys: []string{"test"}}
+var dummy = DummyAuthorizer{}
 var Authorizers = map[string]Authorizer{
 	DEFAULT: &dummy,
 	DUMMY:   &dummy,
