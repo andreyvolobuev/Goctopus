@@ -40,14 +40,14 @@ func (g *Goctopus) handleWs(w http.ResponseWriter, r *http.Request) {
 	keys, err := g.authorizer.Authorize(g, r)
 
 	if err != nil {
-		g.Log("Authentication failed: %s", err)
+		g.Log(AUTH_FAILED, err)
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 
 	conn, _, _, err := ws.UpgradeHTTP(r, w)
 	if err != nil {
-		g.Log("%s", err)
+		g.Log(ERR_TEMPLATE, err)
 		return
 	}
 
@@ -63,16 +63,18 @@ func (g *Goctopus) handleWs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (g *Goctopus) handlePost(w http.ResponseWriter, r *http.Request) {
+	g.Log(POST_NEW_MSG)
+
 	if os.Getenv("WS_LOGIN") != "" && os.Getenv("WS_PASSWORD") != "" {
 		username, password, ok := r.BasicAuth()
 		if !ok {
-			g.Log("Credentials for POST-request not provided!")
+			g.Log(NO_CREDS_FOR_POST)
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 
 		if username != os.Getenv("WS_LOGIN") || password != os.Getenv("WS_PASSWORD") {
-			g.Log("POST-request with bad credentials")
+			g.Log(BAD_CREDS_FOR_POST)
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
@@ -80,12 +82,12 @@ func (g *Goctopus) handlePost(w http.ResponseWriter, r *http.Request) {
 
 	m := Message{}
 	if err := m.unmarshal(r.Body); err != nil {
-		g.Log("%s", err)
+		g.Log(ERR_TEMPLATE, err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	g.Log("New message for %s (expires in: %s)", m.Key, m.Expire)
+	g.Log(NEW_MSG_CREATED, m.toMap(true))
 
 	g.schedule(func() {
 		g.mu.Lock()
@@ -102,7 +104,7 @@ func (g *Goctopus) handleGet(w http.ResponseWriter, r *http.Request) {
 	key := r.URL.Query().Get("key")
 	var data []byte
 	if key == "" {
-		g.Log("[GET] list of all available keys in storage")
+		g.Log(GET_ALL_MSGS)
 		b, err := g.getMarshalledKeys()
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
@@ -110,7 +112,7 @@ func (g *Goctopus) handleGet(w http.ResponseWriter, r *http.Request) {
 		}
 		data = b
 	} else {
-		g.Log("[GET] list of messages from key: %s", key)
+		g.Log(GET_MSGS_FROM_KEY, key)
 		b, err := g.getMarshalledMessages(key)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
@@ -142,7 +144,7 @@ func (g *Goctopus) handleDelete(w http.ResponseWriter, r *http.Request) {
 	g.Log("[DELETE] " + m)
 
 	if id_ != "" && key == "" {
-		g.Log("can not handle delete request where message id %s is provided, but key is not.", id_)
+		g.Log(ID_BUT_NO_KEY_ERR, id_)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -155,37 +157,29 @@ func (g *Goctopus) handleDelete(w http.ResponseWriter, r *http.Request) {
 		for _, key := range keys {
 			g.deleteMsgQueue(key)
 		}
-		g.Log("deleted all messages for all the keys in storage")
+		g.Log(ALL_DELETED)
 	} else {
 		if id_ == "" {
 			g.deleteMsgQueue(key)
-			g.Log("deleted all messages from key: %s", key)
+			g.Log(ALL_DELETED_FROM_KEY, key)
 		} else {
 			id, err := uuid.Parse(id_)
 			if err != nil {
-				g.Log("provided message id (%s) can not be converted to uuid", id)
+				g.Log(INVALID_UUID, id)
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-			queue, err := g.getMsgQueue(key)
+			err = g.deleteMsgById(key, id)
 			if err != nil {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-			for i, msg := range queue {
-				if msg.id == id {
-					err := g.updateMsgQueue(key, append(queue[:i], queue[i+1:]...))
-					if err != nil {
-						w.WriteHeader(http.StatusBadRequest)
-						return
-					}
-				}
-			}
-			g.Log("deleted message with id: %s, from key: %s", id, key)
+			g.Log(DELETED_MSG, id, key)
 		}
 	}
 }
 
 func (g *Goctopus) handleMethodNotAllowed(w http.ResponseWriter, r *http.Request) {
+	g.Log(METHOD_NOT_ALLOWED, r.Method)
 	w.WriteHeader(http.StatusMethodNotAllowed)
 }

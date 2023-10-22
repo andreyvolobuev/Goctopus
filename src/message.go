@@ -50,11 +50,11 @@ func (m *Message) unmarshal(data io.ReadCloser) error {
 	}
 
 	if m.Key == "" {
-		return errors.New("invalid message key")
+		return errors.New(INVALID_KEY)
 	}
 
 	if m.Value == nil {
-		return errors.New("invalid message value")
+		return errors.New(INVALID_VALUE)
 	}
 
 	if m.Expire == "" {
@@ -62,6 +62,10 @@ func (m *Message) unmarshal(data io.ReadCloser) error {
 	}
 
 	m.date = time.Now()
+	m.id, err = uuid.NewRandom()
+	if err != nil {
+		return err
+	}
 
 	return nil
 }

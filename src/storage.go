@@ -24,6 +24,6 @@ type Storage interface {
 // add your custom storage here:
 var memstorage = MemoryStorage{}
 var Storages = map[string]Storage{
-	"default": &memstorage,
-	"memory":  &memstorage,
+	DEFAULT: &memstorage,
+	MEMORY:  &memstorage,
 }

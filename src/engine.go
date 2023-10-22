@@ -29,7 +29,7 @@ type Goctopus struct {
 }
 
 func (g *Goctopus) Start() {
-	g.Log("starting Goctopus websocket app...")
+	g.Log(START_APP)
 
 	g.storage = g.getStorage()
 	g.authorizer = g.getAuthorizer()
@@ -38,7 +38,7 @@ func (g *Goctopus) Start() {
 
 	n_workers, err := strconv.Atoi(os.Getenv("WS_WORKERS"))
 	if err != nil {
-		panic("Can not parse WS_WORKERS! The value has to be an integer.")
+		panic(WS_WORKERS_NOT_FOUND)
 	}
 	g.sem = make(chan struct{}, n_workers)
 	g.work = make(chan func())
@@ -63,7 +63,7 @@ func (g *Goctopus) worker(task func()) {
 func (g *Goctopus) getMsgQueue(key string) ([]Message, error) {
 	queue, err := g.storage.GetQueue(key)
 	if err != nil {
-		g.Log("%s", err)
+		g.Log(ERR_TEMPLATE, err)
 		return nil, err
 	}
 	return queue, nil
@@ -72,7 +72,7 @@ func (g *Goctopus) getMsgQueue(key string) ([]Message, error) {
 func (g *Goctopus) updateMsgQueue(key string, queue []Message) error {
 	err := g.storage.SetQueue(key, queue)
 	if err != nil {
-		g.Log("%s", err)
+		g.Log(ERR_TEMPLATE, err)
 		return err
 	}
 	return nil
@@ -81,26 +81,26 @@ func (g *Goctopus) updateMsgQueue(key string, queue []Message) error {
 func (g *Goctopus) deleteMsgQueue(key string) {
 	err := g.storage.DeleteQueue(key)
 	if err != nil {
-		g.Log("%s", err)
+		g.Log(ERR_TEMPLATE, err)
 	}
 }
 
 func (g *Goctopus) sendMessages(key string) {
-	g.Log("Start sending messages for %s", key)
+	g.Log(START_SENDING, key)
 
 	if len(g.Conns[key]) == 0 {
-		g.Log("No active connections for %s. Return", key)
+		g.Log(NO_CONNS, key)
 		return
 	}
 
 	msgQueue, err := g.getMsgQueue(key)
 	if err != nil {
-		g.Log("Could not get messages for %s. Return", key)
+		g.Log(ERR_GET_MSGS, key)
 		return
 	}
 
 	if len(msgQueue) == 0 {
-		g.Log("No messages to send for %s. Return", key)
+		g.Log(NO_MSGS, key)
 		return
 	}
 
@@ -108,23 +108,23 @@ func (g *Goctopus) sendMessages(key string) {
 	conns := make([]net.Conn, 0, len(g.Conns[key]))
 
 	for i, msg := range msgQueue {
-		g.Log("Try sending message id: %s, value: %s, to %s", msg.id, msg.Value, key)
+		g.Log(TRY_SENDING_MSG, msg.id, msg.Value, key)
 
 		if msg.isExpired() {
-			g.Log("Message id:%d is expired and will be discarted", msg.id)
+			g.Log(MSG_EXPIRED, msg.id)
 			continue
 		}
 
 		data, err := msg.marshal(false)
 		if err != nil {
-			g.Log("%s. Will discard this message from queue for %s", err, key)
+			g.Log(MARSHAL_ERR, err, key)
 			continue
 		}
 
 		for _, conn := range g.Conns[key] {
 			err = g.sendMessage(conn, data, msg.id)
 			if err != nil {
-				g.Log("%s. Will remove a conn from %s", err, key)
+				g.Log(CONN_ERR, err, key)
 				conn.Close()
 				continue
 			}
@@ -143,18 +143,18 @@ func (g *Goctopus) sendMessages(key string) {
 
 	if l := len(queue); l == 0 {
 		g.deleteMsgQueue(key)
-		g.Log("All messages for %s have been sent, the queue is empty", key)
+		g.Log(ALL_SENT, key)
 	} else {
 		g.updateMsgQueue(key, queue)
-		g.Log("There are %d unsent messages tha will remain in the queue for %s", l, key)
+		g.Log(NOT_ALL_SENT, l, key)
 	}
 
 	if l := len(conns); l == 0 {
 		delete(g.Conns, key)
-		g.Log("All connections for %s have been closed", key)
+		g.Log(ALL_CONNS_CLOSED, key)
 	} else {
 		g.Conns[key] = conns
-		g.Log("There are %d active connections remain for %s", l, key)
+		g.Log(NOT_ALL_CONNS_CLOSED, l, key)
 	}
 }
 
@@ -162,7 +162,6 @@ func (g *Goctopus) sendMessage(c net.Conn, d []byte, id uuid.UUID) error {
 	if err := wsutil.WriteServerMessage(c, ws.OpText, d); err != nil {
 		return err
 	}
-
 	c.SetReadDeadline(time.Now().Add(time.Second * 1))
 	msg, _, err := wsutil.ReadClientData(c)
 	if err != nil {
@@ -170,47 +169,40 @@ func (g *Goctopus) sendMessage(c net.Conn, d []byte, id uuid.UUID) error {
 	} else {
 		c.SetReadDeadline(time.Time{})
 	}
-
 	data := make(map[string]interface{})
-
 	err = json.Unmarshal(msg, &data)
 	if err != nil {
 		return err
 	}
-
 	id_, ok := data["id"].(string)
 	if !ok {
-		return errors.New("could not convert message id to bytes")
+		m := fmt.Sprintf(COULD_NOT_CONVERT_TO_ERR, BYTES)
+		return errors.New(m)
 	}
 	received_uuid, err := uuid.Parse(id_)
 	if err != nil {
-		return errors.New("could not convert message id to uuid")
+		m := fmt.Sprintf(COULD_NOT_CONVERT_TO_ERR, UUID)
+		return errors.New(m)
 	}
 	if id != received_uuid {
-		g.Log("received confirmation for wrong id (expected for %s, got for %s)", id, received_uuid)
-		return errors.New("received confirmation for wrong id")
+		m := fmt.Sprintf(WRONG_ID_CONFIRM, id, received_uuid)
+		g.Log(m)
+		return errors.New(m)
 	}
-
 	return nil
 }
 
 func (g *Goctopus) queueMessage(m Message) {
-	new_uuid, err := uuid.NewRandom()
+	err := g.storage.AddMessage(m.Key, m)
 	if err != nil {
-		g.Log("%s", err)
-		return
-	}
-	m.id = new_uuid
-	err = g.storage.AddMessage(m.Key, m)
-	if err != nil {
-		g.Log("%s", err)
+		g.Log(ERR_TEMPLATE, err)
 		return
 	}
 }
 
 func (g *Goctopus) newConn(key string, conn net.Conn) {
 	g.Conns[key] = append(g.Conns[key], conn)
-	g.Log("Saved new connection for %s", key)
+	g.Log(SAVED_NEW_CONN, key)
 }
 
 func (g *Goctopus) Log(format string, v ...any) {
@@ -226,26 +218,28 @@ func (g *Goctopus) Log(format string, v ...any) {
 func (g *Goctopus) getStorage() Storage {
 	m := Storages[strings.ToLower(storageEngine)]
 	m.Init()
-	g.Log("Storage %s initialized", storageEngine)
+	g.Log(STORAGE_INITIALIZED, storageEngine)
 	return m
 }
 
 func (g *Goctopus) getAuthorizer() Authorizer {
 	a := Authorizers[strings.ToLower(authorizerEngine)]
-	g.Log("Authorizer %s will be used", authorizerEngine)
+	g.Log(AUTHORIZER_INITIALIZED, authorizerEngine)
 	return a
 }
 
 func (g *Goctopus) getMarshalledKeys() ([]byte, error) {
 	keys, err := g.storage.GetKeys()
 	if err != nil {
-		g.Log("%s", err)
-		return nil, errors.New("could not get list of all available keys")
+		m := fmt.Sprintf(ERR_TEMPLATE, err)
+		g.Log(m)
+		return nil, errors.New(m)
 	}
 	data, err := json.Marshal(keys)
 	if err != nil {
-		g.Log("%s", err)
-		return nil, errors.New("could not marshal list of all available keys")
+		m := fmt.Sprintf(ERR_TEMPLATE, err)
+		g.Log(m)
+		return nil, errors.New(m)
 	}
 	return data, nil
 }
@@ -253,19 +247,51 @@ func (g *Goctopus) getMarshalledKeys() ([]byte, error) {
 func (g *Goctopus) getMarshalledMessages(key string) ([]byte, error) {
 	q, err := g.getMsgQueue(key)
 	if err != nil {
-		m := fmt.Sprintf("could not get list of keys for %s", key)
-		g.Log("%s", m)
+		m := fmt.Sprintf(LIST_KEYS_ERR, key)
+		g.Log(m)
 		return nil, errors.New(m)
 	}
-	maps := make([]map[string]any, len(q))
-	for i, m := range q {
-		maps[i] = m.toMap(true)
+	maps := []map[string]any{}
+	exp := []Message{}
+	for _, m := range q {
+		if m.isExpired() {
+			exp = append(exp, m)
+		} else {
+			maps = append(maps, m.toMap(true))
+		}
 	}
+
+	g.schedule(func() {
+		g.mu.Lock()
+		defer g.mu.Unlock()
+
+		for _, m := range exp {
+			g.Log(MSG_EXPIRED, m.id)
+			g.deleteMsgById(key, m.id)
+		}
+	})
+
 	queue, err := json.Marshal(maps)
 	if err != nil {
-		m := fmt.Sprintf("could not marshal messages for %s", key)
-		g.Log("%s", m)
+		m := fmt.Sprintf(ERR_TEMPLATE, err)
+		g.Log(m)
 		return nil, errors.New(m)
 	}
 	return queue, err
+}
+
+func (g *Goctopus) deleteMsgById(key string, id uuid.UUID) error {
+	queue, err := g.getMsgQueue(key)
+	if err != nil {
+		return err
+	}
+	for i, msg := range queue {
+		if msg.id == id {
+			err := g.updateMsgQueue(key, append(queue[:i], queue[i+1:]...))
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

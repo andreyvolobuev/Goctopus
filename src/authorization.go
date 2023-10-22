@@ -44,7 +44,7 @@ func (r *AuthResponse) Export() []string {
 func (g *Goctopus) Authorize(r *http.Request) ([]string, error) {
 	// AuthURL, err := url.Parse(os.Getenv("WS_AUTH_URL"))
 	// if err != nil {
-	// 	g.Log("%s", err)
+	// 	g.Log(ERR_TEMPLATE, err)
 	// }
 
 	// r.URL = AuthURL
@@ -53,19 +53,19 @@ func (g *Goctopus) Authorize(r *http.Request) ([]string, error) {
 	// client := &http.Client{}
 	// resp, err := client.Do(r)
 	// if err != nil {
-	// 	g.Log("%s", err)
+	// 	g.Log(ERR_TEMPLATE, err)
 	// 	return []string{}, err
 	// }
 
 	// b, err := io.ReadAll(resp.Body)
 	// if err != nil {
-	// 	g.Log("%s", err)
+	// 	g.Log(ERR_TEMPLATE, err)
 	// 	return []string{}, err
 	// }
 
 	// data := AuthResponse{}
 	// if err := json.Unmarshal(b, &data); err != nil {
-	// 	g.Log("%s", err)
+	// 	g.Log(ERR_TEMPLATE, err)
 	// 	return []string{}, err
 	// }
 
@@ -79,6 +79,6 @@ func (g *Goctopus) Authorize(r *http.Request) ([]string, error) {
 
 var dummy = DummyAuthorizer{keys: []string{"test"}}
 var Authorizers = map[string]Authorizer{
-	"dummy":   &dummy,
-	"default": &dummy,
+	DEFAULT: &dummy,
+	DUMMY:   &dummy,
 }
