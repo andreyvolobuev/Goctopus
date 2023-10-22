@@ -6,6 +6,7 @@ const (
 	POST_NEW_MSG             = "[POST] New message!"
 	NO_CREDS_FOR_POST        = "Credentials for POST-request not provided!"
 	BAD_CREDS_FOR_POST       = "POST-request with bad credentials"
+	AUTH_INVALID_CREDS       = "invalid credentials"
 	NEW_MSG_CREATED          = "New message: %s"
 	GET_ALL_MSGS             = "[GET] list of all available keys in the storage"
 	GET_MSGS_FROM_KEY        = "[GET] list all messages from key: %s"
@@ -42,4 +43,6 @@ const (
 	DEFAULT                  = "default"
 	MEMORY                   = "memory"
 	DUMMY                    = "dummy"
+	PROXY                    = "proxy"
+	NULL                     = ""
 )

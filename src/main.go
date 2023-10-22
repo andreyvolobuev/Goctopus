@@ -68,7 +68,7 @@ func main() {
 	os.Setenv("WS_PASSWORD", password)
 	os.Setenv("WS_VERBOSE", verbose)
 
-	if authUrl == "" {
+	if authUrl == NULL {
 		panic("You must set URL for authenticating incoming websocket requests. You may do that by setting WS_AUTH_URL environment variable or by running goctopus with --auth flag")
 	}
 	os.Setenv("WS_AUTH_URL", authUrl)
