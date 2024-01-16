@@ -49,7 +49,7 @@ func (m *Message) unmarshal(data io.ReadCloser) error {
 		return err
 	}
 
-	if m.Key == NULL {
+	if m.Key == EMPTY_STR {
 		return errors.New(INVALID_KEY)
 	}
 
@@ -57,7 +57,7 @@ func (m *Message) unmarshal(data io.ReadCloser) error {
 		return errors.New(INVALID_VALUE)
 	}
 
-	if m.Expire == NULL {
+	if m.Expire == EMPTY_STR {
 		m.Expire = os.Getenv(WS_MSG_EXPIRE)
 	}
 

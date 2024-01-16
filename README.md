@@ -74,11 +74,13 @@ docker run \
 - WS_HOST (flag --host): hostname or ip that the server will run on
 - WS_PORT (flag --port): port that the server will listen to
 - WS_WORKERS (flag --workers): number of workers (goroutines) that will process the websocket connections. Each takes about 8kb of RAM
-- WS_MSG_EXPIRE (flag --expire): if a message is sent from backend but Goctopus can't find a corresponding connection from frontend, then it will keep the message for this amount of time and if the requested user finally joins then the message will be delivered
+- WS_MSG_EXPIRE (flag --expire): if a message is sent from backend but Goctopus can't find a corresponding connection from frontend, then it will keep the message for this amount of time and if the requested user finally joins then the message will be delivered. Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h"
 - WS_LOGIN (flag --login): login required from backend to send POST-requests
 - WS_PASSWORD (flag --password): password required from backend to send POST-requests
-- WS_AUTH_URL (flag --auth): forward incomming requests from frontend to this URL in order to authorize a request
 - WS_VERBOSE (flag --verbose): wether or not log everything to console
+- WS_STORAGE (flag --storage): which message storage to use. Valid options are: "default" / "memory" (these two are same. More storages are to be implemented later. Redis is the next one to come)
+- WS_AUTHORIZER (flag --authorizer): which authorization engine to use. Valid options are: "default" / "proxy" (same) or "dummy" (use for development only)
+- WS_AUTH_URL (flag --auth): forward incomming requests from frontend to this URL in order to authorize a request or use this value as a dummy authorizer return
 
 
 ### API
@@ -88,8 +90,11 @@ docker run \
 let socket = new WebSocket("ws://goctopus:7890");
 
 socket.onmessage = function(event) {
+  // send the message id back to goctopus so it knows the message has been received and processed
+  d = JSON.parse(event.data)
+  socket.send(JSON.stringify({"id": d.id}))
   // do something with data that commes from backend
-  console.log(event.data)
+  console.log(d)
 };
 ```
 

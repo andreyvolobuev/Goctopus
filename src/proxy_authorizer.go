@@ -21,7 +21,7 @@ func (r *AuthResponse) Export() []string {
 
 	keys := []string{r.User.Email, r.User.Ogranization}
 	for _, key := range keys {
-		if key != NULL {
+		if key != EMPTY_STR {
 			exported = append(exported, key)
 		}
 	}
@@ -36,7 +36,7 @@ type ProxyAuthorizer struct {
 
 func (a *ProxyAuthorizer) Authorize(g *Goctopus, r *http.Request) ([]string, error) {
 	r.URL = a.url
-	r.RequestURI = NULL
+	r.RequestURI = EMPTY_STR
 
 	resp, err := a.client.Do(r)
 	if err != nil {

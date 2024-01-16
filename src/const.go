@@ -48,13 +48,13 @@ const (
 	DELETE_METHOD            = "[DELETE] "
 
 	// literals
-	BYTES   = "bytes"
-	UUID    = "uuid"
-	DEFAULT = "default"
-	MEMORY  = "memory"
-	DUMMY   = "dummy"
-	PROXY   = "proxy"
-	NULL    = ""
+	BYTES     = "bytes"
+	UUID      = "uuid"
+	DEFAULT   = "default"
+	MEMORY    = "memory"
+	DUMMY     = "dummy"
+	PROXY     = "proxy"
+	EMPTY_STR = ""
 
 	// environments variable names
 	WS_WORKERS    = "WS_WORKERS"
@@ -62,6 +62,7 @@ const (
 	WS_HOST       = "WS_HOST"
 	WS_PORT       = "WS_PORT"
 	WS_MSG_EXPIRE = "WS_MSG_EXPIRE"
+	WS_AUTHORIZER = "WS_AUTHORIZER"
 	WS_STORAGE    = "WS_STORAGE"
 	WS_LOGIN      = "WS_LOGIN"
 	WS_PASSWORD   = "WS_PASSWORD"
