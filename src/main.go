@@ -56,7 +56,7 @@ func main() {
 	}
 	flag.StringVar(&storageEngine, "storage", storageDefault, "Storage engine that is used to keep message queues")
 
-	authorizerDefault, ok := os.LookupEnv(WS_STORAGE)
+	authorizerDefault, ok := os.LookupEnv(WS_AUTHORIZER)
 	if !ok {
 		authorizerDefault = DEFAULT
 	}
