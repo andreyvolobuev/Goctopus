@@ -83,7 +83,7 @@ docker run \
 - WS_AUTH_URL (flag --auth): forward incomming requests from frontend to this URL in order to authorize a request or use this value as a dummy authorizer return
 
 
-### API
+### Use
 
 - frontend should create a websocket instance and declare a handler for incoming messages
 ```
@@ -124,3 +124,11 @@ import requests
 message = {"key": "noreply@goole.com", "value": {"foo": "bar"}, "expire": "30m"}
 r = requests.post("http://goctopus:7890", data=json.dumps(message), auth=("admin", "mystrongpassword"))
 ```
+
+### API
+
+Goctopus server supports the following HTTP API:
+* `GET ` Returns list of keys currently stored
+* `GET ?key=<key>` Returns all messages stored for a provided key
+* `POST ?key=<key>&value=<value>&expire=<expire:optional>` Saves a message (value) for a given username (key)
+* `DELETE ?key=<key:optional>&id=<id:optional>` Deletes messages. If key is set but message id is not, then all messages for given key will be deleted. If both key and message id are set then only message with given key will be deleted. If key and message id are not set then all messages for all keys will be deleted.
