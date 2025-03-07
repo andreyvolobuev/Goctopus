@@ -29,10 +29,8 @@ func (g *Goctopus) handleHTTP(w http.ResponseWriter, r *http.Request) {
 		g.handleGet(w, r)
 	case http.MethodDelete:
 		g.handleDelete(w, r)
-
 	default:
 		g.handleMethodNotAllowed(w, r)
-
 	}
 }
 
