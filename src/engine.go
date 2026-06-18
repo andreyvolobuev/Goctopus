@@ -23,6 +23,11 @@ const sendShards = 256
 type Goctopus struct {
 	Conns map[string][]*client
 
+	// patterns is the set of currently-registered wildcard connection keys.
+	// Tracking them separately keeps the common no-wildcard lookup O(1) while
+	// still supporting pattern subscribers. Guarded by mu.
+	patterns map[string]bool
+
 	mu sync.Mutex
 
 	// sendLocks serializes delivery per key without holding the global mu
@@ -47,6 +52,7 @@ func (g *Goctopus) Start() {
 	g.authorizer = g.getAuthorizer()
 
 	g.Conns = make(map[string][]*client)
+	g.patterns = make(map[string]bool)
 
 	n_workers, err := strconv.Atoi(os.Getenv(WS_WORKERS))
 	if err != nil {
@@ -153,7 +159,7 @@ func (g *Goctopus) sendMessages(key string) {
 	defer sl.Unlock()
 
 	g.mu.Lock()
-	clients := append([]*client(nil), g.Conns[key]...)
+	clients := g.clientsForKey(key)
 	msgQueue, err := g.getMsgQueue(key)
 	g.mu.Unlock()
 
@@ -195,6 +201,49 @@ func (g *Goctopus) sendMessages(key string) {
 	}
 }
 
+// clientsForKey returns every client that should receive a message published to
+// the concrete key: those registered under the exact key plus those registered
+// under a wildcard pattern that matches it. The caller must hold g.mu.
+func (g *Goctopus) clientsForKey(key string) []*client {
+	seen := make(map[*client]bool)
+	out := make([]*client, 0, len(g.Conns[key]))
+
+	add := func(clients []*client) {
+		for _, c := range clients {
+			if !seen[c] {
+				seen[c] = true
+				out = append(out, c)
+			}
+		}
+	}
+
+	add(g.Conns[key])
+	for pattern := range g.patterns {
+		if keyMatches(pattern, key) {
+			add(g.Conns[pattern])
+		}
+	}
+	return out
+}
+
+// storageKeysMatching returns the concrete storage keys that a wildcard
+// subscription pattern covers, so a freshly-connected pattern subscriber can be
+// sent the existing backlog. The caller must hold g.mu.
+func (g *Goctopus) storageKeysMatching(pattern string) []string {
+	keys, err := g.storage.GetKeys()
+	if err != nil {
+		g.Log(ERR_TEMPLATE, err)
+		return nil
+	}
+	var out []string
+	for _, k := range keys {
+		if keyMatches(pattern, k) {
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
 func (g *Goctopus) queueMessage(m Message) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -217,10 +266,11 @@ func (g *Goctopus) Log(format string, v ...any) {
 }
 
 func (g *Goctopus) getStorage() Storage {
-	m, ok := Storages[strings.ToLower(storageEngine)]
+	factory, ok := Storages[strings.ToLower(storageEngine)]
 	if !ok {
 		panic(fmt.Sprintf(UNKNOWN_STORAGE, storageEngine))
 	}
+	m := factory()
 	if err := m.Init(); err != nil {
 		panic(fmt.Sprintf(STORAGE_INIT_ERR, storageEngine, err))
 	}
@@ -229,8 +279,14 @@ func (g *Goctopus) getStorage() Storage {
 }
 
 func (g *Goctopus) getAuthorizer() Authorizer {
-	a := Authorizers[strings.ToLower(authorizerEngine)]
-	a.Init()
+	factory, ok := Authorizers[strings.ToLower(authorizerEngine)]
+	if !ok {
+		panic(fmt.Sprintf(UNKNOWN_AUTHORIZER, authorizerEngine))
+	}
+	a := factory()
+	if err := a.Init(); err != nil {
+		panic(fmt.Sprintf(AUTHORIZER_INIT_ERR, authorizerEngine, err))
+	}
 	g.Log(AUTHORIZER_INITIALIZED, authorizerEngine)
 	return a
 }

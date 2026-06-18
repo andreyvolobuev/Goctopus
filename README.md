@@ -87,6 +87,7 @@ docker run \
 - WS_PING_INTERVAL (flag --ping-interval): how often idle websocket connections are pinged for keepalive (default `30s`)
 - WS_READ_TIMEOUT (flag --read-timeout): drop a connection if no frame (including a pong) arrives within this time (default `70s`)
 - WS_INSECURE_NO_AUTH (flag --insecure-no-auth): allow unauthenticated POST requests. **DEVELOPMENT ONLY** — see Security below
+- WS_TLS_CERT / WS_TLS_KEY (flags --tls-cert / --tls-key): paths to a TLS certificate and private key. When both are set Goctopus serves over TLS, so the websocket endpoint is available as `wss://`
 
 
 ### Security
@@ -203,10 +204,36 @@ WS_STORAGE=redis WS_REDIS_URL=redis://localhost:6379/0 ./goctopus --auth ...
 See [docker-compose.yml](docker-compose.yml) for a ready-to-run Redis-backed stack (`docker compose up`, and `--scale goctopus=3` to see coordination).
 
 
+### TLS / wss://
+
+Set `--tls-cert` and `--tls-key` (or `WS_TLS_CERT` / `WS_TLS_KEY`) to serve directly over TLS; clients then connect with `wss://`. You can also terminate TLS at a reverse proxy and run Goctopus plain behind it — either works.
+
+```
+./goctopus --auth ... --tls-cert /etc/ssl/goctopus.crt --tls-key /etc/ssl/goctopus.key
+```
+
+
+### Wildcard topics
+
+The keys a connection is registered under (returned by your `WS_AUTH_URL` endpoint, see [src/authorization.go](src/authorization.go)) may be **glob patterns**. Backends still POST to concrete keys; a message is delivered to every connection whose key matches it.
+
+- A connection authorized for `org.*` receives messages POSTed to `org.sales`, `org.support`, etc.
+- Matching uses [`path.Match`](https://pkg.go.dev/path#Match) semantics (`*`, `?`, `[...]`); `*` does not cross the `/` separator, so you can namespace topics as `team/*` vs `team/*/alerts`.
+- A pattern subscriber that connects after messages were queued receives the backlog for every matching key.
+
+Use concrete keys for direct (per-user) messaging and patterns for broadcast/fan-out.
+
+
+### Client SDKs
+
+Reference clients for JavaScript (browser/Node), Python and Go live in [clients/](clients/). They ACK by id, de-duplicate re-deliveries and reconnect with backoff out of the box.
+
+
 ### Roadmap
 
 - [x] Redis storage backend for persistence and horizontal scaling
 - [x] Asynchronous ACK protocol with per-connection read loop and ping/pong keepalive
-- [ ] Native TLS / `wss://` listener option
-- [ ] Wildcard topics and explicit broadcast vs direct messaging
-- [ ] Client SDKs (JS/TS, Python, Go) with built-in reconnect and de-duplication
+- [x] Native TLS / `wss://` listener option
+- [x] Wildcard topics for broadcast/fan-out messaging
+- [x] Client SDKs (JS, Python, Go) with built-in reconnect and de-duplication
+- [ ] Presence (who is online) and optional message history

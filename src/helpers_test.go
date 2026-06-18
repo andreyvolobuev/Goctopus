@@ -8,6 +8,13 @@ import (
 // newTestApp builds a Goctopus instance wired to the in-memory storage and the
 // dummy authorizer so tests can run without an external auth backend.
 func newTestApp(t *testing.T) *Goctopus {
+	return newTestAppWithKey(t, "testkey")
+}
+
+// newTestAppWithKey builds a test app whose dummy authorizer registers every
+// connection under the given key (which may be a wildcard pattern). The key is
+// set before Start so it is captured once and never read across goroutines.
+func newTestAppWithKey(t *testing.T, key string) *Goctopus {
 	t.Helper()
 
 	os.Setenv(WS_WORKERS, "8")
@@ -21,7 +28,7 @@ func newTestApp(t *testing.T) *Goctopus {
 
 	storageEngine = MEMORY
 	authorizerEngine = DUMMY
-	authUrl = "testkey"
+	authUrl = key
 
 	app := &Goctopus{}
 	app.Start()

@@ -2,6 +2,9 @@ package main
 
 import "net/http"
 
+// DummyAuthorizer authorizes every connection under a single key captured from
+// the configured auth URL value at Init time. Intended for development only.
+// The key may be a wildcard pattern (e.g. "org.*").
 type DummyAuthorizer struct {
 	keys []string
 }

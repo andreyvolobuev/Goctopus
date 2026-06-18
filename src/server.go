@@ -69,6 +69,9 @@ func (g *Goctopus) handleWs(w http.ResponseWriter, r *http.Request) {
 	g.mu.Lock()
 	for _, key := range keys {
 		g.Conns[key] = append(g.Conns[key], c)
+		if hasWildcard(key) {
+			g.patterns[key] = true
+		}
 	}
 	g.mu.Unlock()
 	g.Log(SAVED_NEW_CONN, keys)
@@ -78,7 +81,17 @@ func (g *Goctopus) handleWs(w http.ResponseWriter, r *http.Request) {
 
 	g.schedule(func() {
 		for _, key := range keys {
-			g.sendMessages(key)
+			if hasWildcard(key) {
+				// Flush the backlog of every concrete key this pattern covers.
+				g.mu.Lock()
+				matched := g.storageKeysMatching(key)
+				g.mu.Unlock()
+				for _, k := range matched {
+					g.sendMessages(k)
+				}
+			} else {
+				g.sendMessages(key)
+			}
 		}
 	})
 }

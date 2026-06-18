@@ -30,11 +30,11 @@ type Notifier interface {
 	Subscribe(handler func(key string))
 }
 
-// map of available storages
-// add your custom storage here:
-var memstorage = MemoryStorage{}
-var Storages = map[string]Storage{
-	DEFAULT: &memstorage,
-	MEMORY:  &memstorage,
-	REDIS:   &RedisStorage{},
+// Storages maps an engine name to a constructor. Each Goctopus instance gets
+// its own storage so instances (and tests) never share mutable state.
+// Add your custom storage here:
+var Storages = map[string]func() Storage{
+	DEFAULT: func() Storage { return &MemoryStorage{} },
+	MEMORY:  func() Storage { return &MemoryStorage{} },
+	REDIS:   func() Storage { return &RedisStorage{} },
 }

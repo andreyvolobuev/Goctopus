@@ -9,9 +9,10 @@ type Authorizer interface {
 	Init() error
 }
 
-var proxy = ProxyAuthorizer{}
-var Authorizers = map[string]Authorizer{
-	DEFAULT: &proxy,
-	PROXY:   &proxy,
-	DUMMY:   &DummyAuthorizer{},
+// Authorizers maps an engine name to a constructor so each Goctopus instance
+// gets its own authorizer. Add your custom authorizer here:
+var Authorizers = map[string]func() Authorizer{
+	DEFAULT: func() Authorizer { return &ProxyAuthorizer{} },
+	PROXY:   func() Authorizer { return &ProxyAuthorizer{} },
+	DUMMY:   func() Authorizer { return &DummyAuthorizer{} },
 }

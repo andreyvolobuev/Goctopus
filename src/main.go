@@ -16,6 +16,7 @@ var (
 	host, port, workers, expire, login, password, authUrl, verbose, storageEngine, authorizerEngine string
 	insecureNoAuth, authTimeout, sweepInterval                                                      string
 	pingInterval, readTimeout, redisUrl                                                             string
+	tlsCert, tlsKey                                                                                 string
 )
 
 func main() {
@@ -104,6 +105,9 @@ func main() {
 	}
 	flag.StringVar(&redisUrl, "redis-url", redisDefault, "Redis connection URL when --storage=redis")
 
+	flag.StringVar(&tlsCert, "tls-cert", os.Getenv(WS_TLS_CERT), "Path to TLS certificate file. Set together with --tls-key to serve over TLS (wss://)")
+	flag.StringVar(&tlsKey, "tls-key", os.Getenv(WS_TLS_KEY), "Path to TLS private key file")
+
 	flag.Parse()
 
 	os.Setenv(WS_WORKERS, workers)
@@ -133,6 +137,10 @@ func main() {
 	fmt.Printf("Storage is: %s\n", storageEngine)
 	fmt.Printf("Authorizer engine: %s\n", authorizerEngine)
 	fmt.Printf("Default message expiry is: %s\n", os.Getenv(WS_MSG_EXPIRE))
+	tlsEnabled := tlsCert != EMPTY_STR && tlsKey != EMPTY_STR
+	if tlsEnabled {
+		fmt.Printf("TLS: enabled (wss://)\n")
+	}
 	fmt.Printf("----------------------------------\n\n")
 
 	srv := &http.Server{
@@ -157,8 +165,15 @@ func main() {
 		close(idleClosed)
 	}()
 
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatal(err)
+	var serveErr error
+	if tlsEnabled {
+		// Serving over TLS makes the websocket endpoint available as wss://.
+		serveErr = srv.ListenAndServeTLS(tlsCert, tlsKey)
+	} else {
+		serveErr = srv.ListenAndServe()
+	}
+	if serveErr != nil && serveErr != http.ErrServerClosed {
+		log.Fatal(serveErr)
 	}
 	<-idleClosed
 }

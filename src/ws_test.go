@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -17,6 +19,30 @@ import (
 // wsURL turns an http test server URL into a ws:// URL pointing at /ws.
 func wsURL(ts *httptest.Server) string {
 	return "ws" + strings.TrimPrefix(ts.URL, "http") + "/ws"
+}
+
+// wsConn reads through the buffered reader returned by ws.Dial (which may hold
+// frame bytes read alongside the handshake) while writes go to the connection.
+type wsConn struct {
+	net.Conn
+	r io.Reader
+}
+
+func (c wsConn) Read(p []byte) (int, error) { return c.r.Read(p) }
+
+// dialWS dials the websocket endpoint, returning a connection that won't lose
+// frames buffered during the handshake.
+func dialWS(t *testing.T, d ws.Dialer, url string) wsConn {
+	t.Helper()
+	conn, br, _, err := d.Dial(context.Background(), url)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	c := wsConn{Conn: conn, r: conn}
+	if br != nil {
+		c.r = br
+	}
+	return c
 }
 
 // connCount returns how many connections are registered for a key.
@@ -47,10 +73,7 @@ func TestWebsocketDeliveryAndAck(t *testing.T) {
 	ts := httptest.NewServer(app)
 	defer ts.Close()
 
-	conn, _, _, err := ws.Dial(context.Background(), wsURL(ts))
-	if err != nil {
-		t.Fatalf("dial: %v", err)
-	}
+	conn := dialWS(t, ws.Dialer{}, wsURL(ts))
 	defer conn.Close()
 
 	// The dummy authorizer registers every connection under "testkey".
@@ -96,10 +119,7 @@ func TestWebsocketNoDuplicateWhileInFlight(t *testing.T) {
 	ts := httptest.NewServer(app)
 	defer ts.Close()
 
-	conn, _, _, err := ws.Dial(context.Background(), wsURL(ts))
-	if err != nil {
-		t.Fatalf("dial: %v", err)
-	}
+	conn := dialWS(t, ws.Dialer{}, wsURL(ts))
 	defer conn.Close()
 	waitFor(t, func() bool { return connCount(app, "testkey") == 1 }, "connection registered")
 
@@ -129,6 +149,100 @@ func TestWebsocketNoDuplicateWhileInFlight(t *testing.T) {
 	}
 }
 
+// A connection subscribed to a wildcard pattern receives messages published to
+// any matching concrete key.
+func TestWebsocketWildcardDelivery(t *testing.T) {
+	app := newTestAppWithKey(t, "org.*") // dummy authorizer registers under this pattern
+	t.Setenv(WS_LOGIN, "admin")
+	t.Setenv(WS_PASSWORD, "secret")
+	ts := httptest.NewServer(app)
+	defer ts.Close()
+
+	conn := dialWS(t, ws.Dialer{}, wsURL(ts))
+	defer conn.Close()
+	waitFor(t, func() bool { return connCount(app, "org.*") == 1 }, "pattern connection registered")
+
+	body := strings.NewReader(`{"key":"org.sales","value":{"hello":"world"}}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/", body)
+	req.SetBasicAuth("admin", "secret")
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	r.Body.Close()
+
+	data, _, err := wsutil.ReadServerData(conn)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if !strings.Contains(string(data), "world") {
+		t.Fatalf("pattern subscriber did not receive message: %s", data)
+	}
+}
+
+// A wildcard subscriber connecting after messages were queued receives the
+// existing backlog for matching keys.
+func TestWebsocketWildcardBacklog(t *testing.T) {
+	app := newTestAppWithKey(t, "org.*")
+	t.Setenv(WS_LOGIN, "admin")
+	t.Setenv(WS_PASSWORD, "secret")
+	ts := httptest.NewServer(app)
+	defer ts.Close()
+
+	// Publish before anyone is connected.
+	body := strings.NewReader(`{"key":"org.support","value":{"n":7}}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/", body)
+	req.SetBasicAuth("admin", "secret")
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	r.Body.Close()
+	waitFor(t, func() bool { return queueLen(app, "org.support") > 0 }, "message queued")
+
+	conn := dialWS(t, ws.Dialer{}, wsURL(ts))
+	defer conn.Close()
+
+	data, _, err := wsutil.ReadServerData(conn)
+	if err != nil {
+		t.Fatalf("read backlog: %v", err)
+	}
+	if !strings.Contains(string(data), "\"n\":7") {
+		t.Fatalf("pattern subscriber did not receive backlog: %s", data)
+	}
+}
+
+// The handler works over TLS, i.e. clients can connect with wss://.
+func TestWebsocketOverTLS(t *testing.T) {
+	app := newTestApp(t)
+	t.Setenv(WS_LOGIN, "admin")
+	t.Setenv(WS_PASSWORD, "secret")
+	ts := httptest.NewTLSServer(app)
+	defer ts.Close()
+
+	wssURL := "wss" + strings.TrimPrefix(ts.URL, "https") + "/ws"
+	conn := dialWS(t, ws.Dialer{TLSConfig: &tls.Config{InsecureSkipVerify: true}}, wssURL)
+	defer conn.Close()
+	waitFor(t, func() bool { return connCount(app, "testkey") == 1 }, "connection registered over tls")
+
+	body := strings.NewReader(`{"key":"testkey","value":{"secure":true}}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/", body)
+	req.SetBasicAuth("admin", "secret")
+	r, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatalf("post over tls: %v", err)
+	}
+	r.Body.Close()
+
+	data, _, err := wsutil.ReadServerData(conn)
+	if err != nil {
+		t.Fatalf("read over tls: %v", err)
+	}
+	if !strings.Contains(string(data), "secure") {
+		t.Fatalf("did not receive message over tls: %s", data)
+	}
+}
+
 // The server proactively pings idle connections for keepalive.
 func TestWebsocketServerSendsPing(t *testing.T) {
 	app := newTestApp(t)
@@ -136,10 +250,7 @@ func TestWebsocketServerSendsPing(t *testing.T) {
 	ts := httptest.NewServer(app)
 	defer ts.Close()
 
-	conn, _, _, err := ws.Dial(context.Background(), wsURL(ts))
-	if err != nil {
-		t.Fatalf("dial: %v", err)
-	}
+	conn := dialWS(t, ws.Dialer{}, wsURL(ts))
 	defer conn.Close()
 
 	gotPing := false

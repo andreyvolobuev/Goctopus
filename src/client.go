@@ -172,6 +172,7 @@ func (g *Goctopus) removeClient(c *client) {
 		}
 		if len(live) == 0 {
 			delete(g.Conns, key)
+			delete(g.patterns, key) // no-op for non-wildcard keys
 		} else {
 			g.Conns[key] = live
 		}

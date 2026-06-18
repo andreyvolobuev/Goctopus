@@ -37,6 +37,8 @@ const (
 	STORAGE_INITIALIZED      = "Storage %s initialized"
 	UNKNOWN_STORAGE          = "unknown storage engine: %s"
 	STORAGE_INIT_ERR         = "could not initialize storage %s: %s"
+	UNKNOWN_AUTHORIZER       = "unknown authorizer engine: %s"
+	AUTHORIZER_INIT_ERR      = "could not initialize authorizer %s: %s"
 	REDIS_NOTIFY_ERR         = "redis notify failed for key %s: %s"
 	AUTHORIZER_INITIALIZED   = "Authorizer %s will be used"
 	LIST_KEYS_ERR            = "could not get list of keys for %s"
@@ -80,6 +82,8 @@ const (
 	WS_PING_INTERVAL    = "WS_PING_INTERVAL"
 	WS_READ_TIMEOUT     = "WS_READ_TIMEOUT"
 	WS_REDIS_URL        = "WS_REDIS_URL"
+	WS_TLS_CERT         = "WS_TLS_CERT"
+	WS_TLS_KEY          = "WS_TLS_KEY"
 
 	// query parameters
 	KEY = "key"
