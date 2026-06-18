@@ -1,9 +1,25 @@
-# Minimal demo stack. Replace WS_AUTH_URL with your own backend's
-# authentication endpoint (it receives the upgrade request and returns the
-# keys/topics for the connection). For local experimentation you can switch
-# WS_AUTHORIZER to "dummy", in which case WS_AUTH_URL is used verbatim as the
-# single key for every connection.
+# Demo stack with the Redis storage backend.
+#
+# Redis gives Goctopus persistence (queues survive restarts) and horizontal
+# scaling: with WS_STORAGE=redis every instance shares the same queues and is
+# notified (via Redis pub/sub) when any other instance receives a message, so a
+# client connected to one instance still gets messages POSTed to another.
+#
+# Replace WS_AUTH_URL with your backend's authentication endpoint. For local
+# experimentation WS_AUTHORIZER=dummy uses WS_AUTH_URL verbatim as the single
+# key for every connection.
 services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
   goctopus:
     build: .
     ports:
@@ -17,7 +33,17 @@ services:
       WS_PASSWORD: change-me
       WS_AUTHORIZER: dummy
       WS_AUTH_URL: demo-user
+      WS_STORAGE: redis
+      WS_REDIS_URL: redis://redis:6379/0
       WS_SWEEP_INTERVAL: 1m
       WS_AUTH_TIMEOUT: 10s
+      WS_PING_INTERVAL: 30s
+      WS_READ_TIMEOUT: 70s
       WS_VERBOSE: "1"
+    depends_on:
+      redis:
+        condition: service_healthy
     restart: unless-stopped
+    # To demonstrate horizontal scaling, run more than one instance behind a
+    # load balancer; they coordinate through Redis:
+    #   docker compose up --scale goctopus=3

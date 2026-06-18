@@ -78,7 +78,8 @@ docker run \
 - WS_LOGIN (flag --login): login required from backend to send POST-requests
 - WS_PASSWORD (flag --password): password required from backend to send POST-requests
 - WS_VERBOSE (flag --verbose): wether or not log everything to console
-- WS_STORAGE (flag --storage): which message storage to use. Valid options are: "default" / "memory" (these two are same. More storages are to be implemented later. Redis is the next one to come)
+- WS_STORAGE (flag --storage): which message storage to use. Valid options are: "default" / "memory" (in-process, fast, not persistent) or "redis" (persistent and shareable across instances — see below)
+- WS_REDIS_URL (flag --redis-url): Redis connection URL when `WS_STORAGE=redis` (default `redis://localhost:6379/0`). Supports the standard `redis://user:pass@host:port/db` form
 - WS_AUTHORIZER (flag --authorizer): which authorization engine to use. Valid options are: "default" / "proxy" (same) or "dummy" (use for development only)
 - WS_AUTH_URL (flag --auth): forward incomming requests from frontend to this URL in order to authorize a request or use this value as a dummy authorizer return
 - WS_AUTH_TIMEOUT (flag --auth-timeout): timeout for requests to the auth backend (default `10s`). Prevents a hung auth server from pinning a worker
@@ -190,9 +191,21 @@ Delivery is **asynchronous and at-least-once**. A backend POST queues a message 
 A message is written to a given connection at most once while awaiting its ACK (in-flight de-duplication), so re-flushing a key never spams already-pending messages. Unacked messages are re-delivered when the client reconnects, and expired messages are removed by the background sweeper. Because the same message id can still arrive after a reconnect, clients should de-duplicate by id (see the snippet above).
 
 
+### Storage backends
+
+- **memory** (default): in-process map. Fast, zero-config, but queues are lost on restart and not shared between instances.
+- **redis**: queues are stored in Redis (one list per key), so they survive restarts. Combined with Redis pub/sub, multiple Goctopus instances coordinate: a message POSTed to instance A is published on a channel, every instance is notified and flushes that key to its own locally-connected clients. This is what makes horizontal scaling work — run several instances behind a load balancer with the same `WS_REDIS_URL`.
+
+```
+WS_STORAGE=redis WS_REDIS_URL=redis://localhost:6379/0 ./goctopus --auth ...
+```
+
+See [docker-compose.yml](docker-compose.yml) for a ready-to-run Redis-backed stack (`docker compose up`, and `--scale goctopus=3` to see coordination).
+
+
 ### Roadmap
 
-- [ ] Redis storage backend (interface is already in place — see [src/storage.go](src/storage.go)) for persistence and horizontal scaling
+- [x] Redis storage backend for persistence and horizontal scaling
 - [x] Asynchronous ACK protocol with per-connection read loop and ping/pong keepalive
 - [ ] Native TLS / `wss://` listener option
 - [ ] Wildcard topics and explicit broadcast vs direct messaging

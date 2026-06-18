@@ -78,3 +78,40 @@ func (m *Message) isExpired() bool {
 	exp, _ := time.ParseDuration(m.Expire)
 	return exp < time.Since(m.date)
 }
+
+// storedMessage is the on-the-wire representation used by persistent storage
+// backends. Message's identity fields (id, date) are unexported and therefore
+// invisible to encoding/json, so we round-trip through this struct.
+type storedMessage struct {
+	ID     uuid.UUID `json:"id"`
+	Key    string    `json:"key"`
+	Value  any       `json:"value"`
+	Expire string    `json:"expire"`
+	Date   time.Time `json:"date"`
+}
+
+// encode serializes a Message (including its id and date) for storage.
+func (m *Message) encode() ([]byte, error) {
+	return json.Marshal(storedMessage{
+		ID:     m.id,
+		Key:    m.Key,
+		Value:  m.Value,
+		Expire: m.Expire,
+		Date:   m.date,
+	})
+}
+
+// decodeMessage rebuilds a Message from its stored representation.
+func decodeMessage(b []byte) (Message, error) {
+	var s storedMessage
+	if err := json.Unmarshal(b, &s); err != nil {
+		return Message{}, err
+	}
+	return Message{
+		id:     s.ID,
+		Key:    s.Key,
+		Value:  s.Value,
+		Expire: s.Expire,
+		date:   s.Date,
+	}, nil
+}

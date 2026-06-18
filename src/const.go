@@ -35,6 +35,9 @@ const (
 	WRONG_ID_CONFIRM         = "received confirmation for wrong id (expected for %s, got for %s)"
 	SAVED_NEW_CONN           = "Saved new connection for %s"
 	STORAGE_INITIALIZED      = "Storage %s initialized"
+	UNKNOWN_STORAGE          = "unknown storage engine: %s"
+	STORAGE_INIT_ERR         = "could not initialize storage %s: %s"
+	REDIS_NOTIFY_ERR         = "redis notify failed for key %s: %s"
 	AUTHORIZER_INITIALIZED   = "Authorizer %s will be used"
 	LIST_KEYS_ERR            = "could not get list of keys for %s"
 	INVALID_KEY              = "invalid message key"
@@ -54,6 +57,7 @@ const (
 	UUID      = "uuid"
 	DEFAULT   = "default"
 	MEMORY    = "memory"
+	REDIS     = "redis"
 	DUMMY     = "dummy"
 	PROXY     = "proxy"
 	EMPTY_STR = ""
@@ -75,6 +79,7 @@ const (
 	WS_SWEEP_INTERVAL   = "WS_SWEEP_INTERVAL"
 	WS_PING_INTERVAL    = "WS_PING_INTERVAL"
 	WS_READ_TIMEOUT     = "WS_READ_TIMEOUT"
+	WS_REDIS_URL        = "WS_REDIS_URL"
 
 	// query parameters
 	KEY = "key"

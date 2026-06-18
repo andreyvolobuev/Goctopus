@@ -20,10 +20,21 @@ type Storage interface {
 	// Return list of all available keys
 }
 
+// Notifier is an optional interface a Storage may implement to support
+// horizontal scaling. When a message is queued on one instance, Notify lets
+// other instances know that a key has new messages so they can flush it to
+// their own locally-connected clients. Subscribe registers the handler that
+// reacts to those notifications.
+type Notifier interface {
+	Notify(key string) error
+	Subscribe(handler func(key string))
+}
+
 // map of available storages
 // add your custom storage here:
 var memstorage = MemoryStorage{}
 var Storages = map[string]Storage{
 	DEFAULT: &memstorage,
 	MEMORY:  &memstorage,
+	REDIS:   &RedisStorage{},
 }

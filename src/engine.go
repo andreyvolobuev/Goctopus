@@ -58,7 +58,26 @@ func (g *Goctopus) Start() {
 	g.pingInterval = envDuration(WS_PING_INTERVAL, 30*time.Second)
 	g.readTimeout = envDuration(WS_READ_TIMEOUT, 70*time.Second)
 
+	// If the storage backend supports cross-instance notifications (Redis),
+	// flush a key locally whenever any instance reports new messages for it.
+	if n, ok := g.storage.(Notifier); ok {
+		n.Subscribe(func(key string) {
+			g.schedule(func() { g.sendMessages(key) })
+		})
+	}
+
 	go g.sweepExpired()
+}
+
+// notify lets other instances know a key has new messages (no-op unless the
+// storage backend is a Notifier). Called outside the global lock so the network
+// publish never blocks other requests.
+func (g *Goctopus) notify(key string) {
+	if n, ok := g.storage.(Notifier); ok {
+		if err := n.Notify(key); err != nil {
+			g.Log(REDIS_NOTIFY_ERR, key, err)
+		}
+	}
 }
 
 // envDuration parses a duration from an environment variable, falling back to
@@ -198,8 +217,13 @@ func (g *Goctopus) Log(format string, v ...any) {
 }
 
 func (g *Goctopus) getStorage() Storage {
-	m := Storages[strings.ToLower(storageEngine)]
-	m.Init()
+	m, ok := Storages[strings.ToLower(storageEngine)]
+	if !ok {
+		panic(fmt.Sprintf(UNKNOWN_STORAGE, storageEngine))
+	}
+	if err := m.Init(); err != nil {
+		panic(fmt.Sprintf(STORAGE_INIT_ERR, storageEngine, err))
+	}
 	g.Log(STORAGE_INITIALIZED, storageEngine)
 	return m
 }

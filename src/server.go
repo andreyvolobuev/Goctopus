@@ -102,6 +102,7 @@ func (g *Goctopus) handlePost(w http.ResponseWriter, r *http.Request) {
 
 	g.schedule(func() {
 		g.queueMessage(m)
+		g.notify(m.Key)
 		g.sendMessages(m.Key)
 	})
 

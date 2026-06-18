@@ -15,7 +15,7 @@ import (
 var (
 	host, port, workers, expire, login, password, authUrl, verbose, storageEngine, authorizerEngine string
 	insecureNoAuth, authTimeout, sweepInterval                                                      string
-	pingInterval, readTimeout                                                                       string
+	pingInterval, readTimeout, redisUrl                                                             string
 )
 
 func main() {
@@ -98,6 +98,12 @@ func main() {
 	}
 	flag.StringVar(&readTimeout, "read-timeout", readTimeoutDefault, "Drop a websocket connection if no frame (incl. pong) arrives within this time")
 
+	redisDefault, ok := os.LookupEnv(WS_REDIS_URL)
+	if !ok {
+		redisDefault = "redis://localhost:6379/0"
+	}
+	flag.StringVar(&redisUrl, "redis-url", redisDefault, "Redis connection URL when --storage=redis")
+
 	flag.Parse()
 
 	os.Setenv(WS_WORKERS, workers)
@@ -110,6 +116,7 @@ func main() {
 	os.Setenv(WS_SWEEP_INTERVAL, sweepInterval)
 	os.Setenv(WS_PING_INTERVAL, pingInterval)
 	os.Setenv(WS_READ_TIMEOUT, readTimeout)
+	os.Setenv(WS_REDIS_URL, redisUrl)
 
 	if authUrl == EMPTY_STR {
 		panic("You must set URL for authenticating incoming websocket requests. You may do that by setting WS_AUTH_URL environment variable or by running goctopus with --auth flag")
