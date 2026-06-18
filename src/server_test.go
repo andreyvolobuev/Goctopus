@@ -14,7 +14,7 @@ import (
 // panic. The old code registered `defer mu.Unlock()` before acquiring the lock,
 // so this early-return path unlocked an unlocked mutex.
 func TestDeleteIdWithoutKeyReturns400(t *testing.T) {
-	app := newTestApp(t)
+	app := newTestAppCfg(t, func(c *Config) { c.InsecureNoAuth = true })
 
 	req := httptest.NewRequest(http.MethodDelete, "/?id="+uuid.New().String(), nil)
 	w := httptest.NewRecorder()
@@ -30,7 +30,7 @@ func TestDeleteIdWithoutKeyReturns400(t *testing.T) {
 // held mu in handleDelete and then called deleteMsgById which tried to lock the
 // same non-reentrant mutex again.
 func TestDeleteByIdDoesNotDeadlock(t *testing.T) {
-	app := newTestApp(t)
+	app := newTestAppCfg(t, func(c *Config) { c.InsecureNoAuth = true })
 
 	id := uuid.New()
 	seed(app, Message{id: id, Key: "k", Value: "v", Expire: "30m", date: time.Now()})
@@ -124,6 +124,7 @@ func TestPostThenGetMessage(t *testing.T) {
 	}
 
 	getReq := httptest.NewRequest(http.MethodGet, "/?key=alice", nil)
+	getReq.SetBasicAuth("admin", "secret")
 	getW := httptest.NewRecorder()
 	app.ServeHTTP(getW, getReq)
 
@@ -132,5 +133,19 @@ func TestPostThenGetMessage(t *testing.T) {
 	}
 	if !strings.Contains(getW.Body.String(), "world") {
 		t.Fatalf("get body does not contain queued value: %s", getW.Body.String())
+	}
+}
+
+// Security: the backend API (GET/DELETE) must require auth, not just POST.
+func TestGetAndDeleteRequireAuth(t *testing.T) {
+	app := newTestAppCfg(t, withCreds)
+
+	for _, method := range []string{http.MethodGet, http.MethodDelete} {
+		req := httptest.NewRequest(method, "/", nil)
+		w := httptest.NewRecorder()
+		app.ServeHTTP(w, req)
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("%s without auth: want %d, got %d", method, http.StatusUnauthorized, w.Code)
+		}
 	}
 }

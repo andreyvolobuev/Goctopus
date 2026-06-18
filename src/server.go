@@ -34,6 +34,13 @@ func (g *Goctopus) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (g *Goctopus) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(CONTENT_TYPE, APPLICATION_JSON)
 
+	// The whole JSON API (publish, list keys, read and delete messages) is a
+	// backend-only surface: it must be authenticated, not just POST. Listing
+	// keys leaks user identifiers and DELETE can wipe every queue.
+	if !g.authorizeBackend(w, r) {
+		return
+	}
+
 	switch r.Method {
 	case http.MethodPost:
 		g.handlePost(w, r)
@@ -97,10 +104,6 @@ func (g *Goctopus) handleWs(w http.ResponseWriter, r *http.Request) {
 func (g *Goctopus) handlePost(w http.ResponseWriter, r *http.Request) {
 	g.Log(POST_NEW_MSG)
 
-	if !g.authorizePost(w, r) {
-		return
-	}
-
 	m := Message{}
 	if err := m.unmarshal(r.Body, g.config.DefaultExpire); err != nil {
 		g.Log(ERR_TEMPLATE, err)
@@ -120,10 +123,11 @@ func (g *Goctopus) handlePost(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusAccepted)
 }
 
-// authorizePost enforces Basic Auth for backend POST requests. It fails closed:
-// unless InsecureNoAuth is explicitly enabled, missing or empty credentials
-// cause the request to be rejected rather than silently accepted.
-func (g *Goctopus) authorizePost(w http.ResponseWriter, r *http.Request) bool {
+// authorizeBackend enforces Basic Auth for the backend JSON API (publish, list,
+// read, delete). It fails closed: unless InsecureNoAuth is explicitly enabled,
+// missing or empty credentials cause the request to be rejected rather than
+// silently accepted.
+func (g *Goctopus) authorizeBackend(w http.ResponseWriter, r *http.Request) bool {
 	if g.config.InsecureNoAuth {
 		return true
 	}
