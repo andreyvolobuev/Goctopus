@@ -177,6 +177,40 @@ func TestWebsocketWildcardDelivery(t *testing.T) {
 	}
 }
 
+// A wildcard subscriber's ACK removes the message from the concrete storage key
+// it was published to (not the pattern), so the queue actually drains.
+func TestWebsocketWildcardAckDrainsConcreteKey(t *testing.T) {
+	app := newTestAppCfg(t, func(c *Config) { c.AuthURL = "org.*"; withCreds(c) })
+	ts := httptest.NewServer(app)
+	defer ts.Close()
+
+	conn := dialWS(t, ws.Dialer{}, wsURL(ts))
+	defer conn.Close()
+	waitFor(t, func() bool { return connCount(app, "org.*") == 1 }, "pattern connection registered")
+
+	body := strings.NewReader(`{"key":"org.support","value":1}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/", body)
+	req.SetBasicAuth("admin", "secret")
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	r.Body.Close()
+
+	data, _, err := wsutil.ReadServerData(conn)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	var msg map[string]any
+	json.Unmarshal(data, &msg)
+	ack, _ := json.Marshal(map[string]any{"id": msg["id"]})
+	if err := wsutil.WriteClientMessage(conn, ws.OpText, ack); err != nil {
+		t.Fatalf("ack: %v", err)
+	}
+
+	waitFor(t, func() bool { return queueLen(app, "org.support") == 0 }, "concrete key drained after wildcard ack")
+}
+
 // A wildcard subscriber connecting after messages were queued receives the
 // existing backlog for matching keys.
 func TestWebsocketWildcardBacklog(t *testing.T) {

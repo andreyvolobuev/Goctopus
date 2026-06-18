@@ -32,7 +32,7 @@ type client struct {
 	wmu sync.Mutex // serializes frame writes
 
 	imu      sync.Mutex
-	inflight map[uuid.UUID]bool
+	inflight map[uuid.UUID]string // message id -> concrete storage key, awaiting ACK
 	closed   bool
 }
 
@@ -42,7 +42,7 @@ func newClient(conn net.Conn, keys []string, writeTimeout time.Duration, compres
 		keys:         keys,
 		writeTimeout: writeTimeout,
 		compress:     compress,
-		inflight:     make(map[uuid.UUID]bool),
+		inflight:     make(map[uuid.UUID]string),
 	}
 }
 
@@ -83,16 +83,33 @@ func (c *client) writePong(payload []byte) error {
 }
 
 // markInflight returns true if the caller should write the message to this
-// connection. It returns false when the connection is closed or the message is
-// already in flight (written and awaiting ACK).
-func (c *client) markInflight(id uuid.UUID) bool {
+// connection. It records the concrete storage key the message belongs to (which
+// may differ from the connection's subscription key when it is a wildcard) so
+// the ACK can later remove it from the right key. It returns false when the
+// connection is closed or the message is already in flight.
+func (c *client) markInflight(id uuid.UUID, key string) bool {
 	c.imu.Lock()
 	defer c.imu.Unlock()
-	if c.closed || c.inflight[id] {
+	if c.closed {
 		return false
 	}
-	c.inflight[id] = true
+	if _, ok := c.inflight[id]; ok {
+		return false
+	}
+	c.inflight[id] = key
 	return true
+}
+
+// takeInflight returns and clears the concrete key recorded for an acknowledged
+// message id.
+func (c *client) takeInflight(id uuid.UUID) (string, bool) {
+	c.imu.Lock()
+	defer c.imu.Unlock()
+	key, ok := c.inflight[id]
+	if ok {
+		delete(c.inflight, id)
+	}
+	return key, ok
 }
 
 func (c *client) clearInflight(id uuid.UUID) {
@@ -188,10 +205,9 @@ func (g *Goctopus) handleAck(c *client, payload []byte) {
 		return
 	}
 
-	c.clearInflight(id)
-
-	// Storage is self-synchronized; no need to hold g.mu around these deletes.
-	for _, key := range c.keys {
+	// Remove the message from the concrete key it was delivered for (which may
+	// differ from this connection's subscription key when it is a wildcard).
+	if key, ok := c.takeInflight(id); ok {
 		g.deleteMsgById(key, id)
 	}
 

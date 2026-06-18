@@ -288,7 +288,7 @@ func (g *Goctopus) sendMessages(key string) {
 		}
 
 		for _, c := range clients {
-			if !c.markInflight(msg.id) {
+			if !c.markInflight(msg.id, key) {
 				continue // closed, or already sent and awaiting ACK
 			}
 			g.Log(TRY_SENDING_MSG, msg.id, msg.Value, key)
