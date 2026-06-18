@@ -6,8 +6,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
-	"time"
 )
 
 type AuthResponse struct {
@@ -64,18 +62,14 @@ func (a *ProxyAuthorizer) Authorize(g *Goctopus, r *http.Request) ([]string, err
 	return keys, nil
 }
 
-func (a *ProxyAuthorizer) Init() error {
-	AuthURL, err := url.Parse(os.Getenv(WS_AUTH_URL))
+func (a *ProxyAuthorizer) Init(cfg *Config) error {
+	AuthURL, err := url.Parse(cfg.AuthURL)
 	if err != nil {
 		return err
 	}
 	a.url = AuthURL
 
 	// Bound the auth call so a hung auth backend can't pin a worker forever.
-	timeout, err := time.ParseDuration(os.Getenv(WS_AUTH_TIMEOUT))
-	if err != nil || timeout <= 0 {
-		timeout = 10 * time.Second
-	}
-	a.client = &http.Client{Timeout: timeout}
+	a.client = &http.Client{Timeout: cfg.AuthTimeout}
 	return nil
 }

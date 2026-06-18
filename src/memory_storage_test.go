@@ -9,7 +9,7 @@ import (
 
 func TestMemoryStorageAddAndGet(t *testing.T) {
 	s := &MemoryStorage{}
-	s.Init()
+	s.Init(nil)
 
 	s.AddMessage("k", Message{id: uuid.New(), Key: "k", Value: 1})
 	s.AddMessage("k", Message{id: uuid.New(), Key: "k", Value: 2})
@@ -25,7 +25,7 @@ func TestMemoryStorageAddAndGet(t *testing.T) {
 
 func TestMemoryStorageDeleteQueue(t *testing.T) {
 	s := &MemoryStorage{}
-	s.Init()
+	s.Init(nil)
 	s.AddMessage("k", Message{id: uuid.New(), Key: "k", Value: 1})
 
 	s.DeleteQueue("k")
@@ -38,7 +38,7 @@ func TestMemoryStorageDeleteQueue(t *testing.T) {
 
 func TestMemoryStorageGetKeys(t *testing.T) {
 	s := &MemoryStorage{}
-	s.Init()
+	s.Init(nil)
 	s.AddMessage("a", Message{id: uuid.New(), Key: "a", Value: 1})
 	s.AddMessage("b", Message{id: uuid.New(), Key: "b", Value: 1})
 

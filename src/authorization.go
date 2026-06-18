@@ -6,7 +6,7 @@ import (
 
 type Authorizer interface {
 	Authorize(*Goctopus, *http.Request) ([]string, error)
-	Init() error
+	Init(*Config) error
 }
 
 // Authorizers maps an engine name to a constructor so each Goctopus instance

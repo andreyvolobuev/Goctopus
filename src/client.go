@@ -91,7 +91,7 @@ func (g *Goctopus) readLoop(c *client) {
 
 	rd := wsutil.NewServerSideReader(c.conn)
 	for {
-		c.conn.SetReadDeadline(time.Now().Add(g.readTimeout))
+		c.conn.SetReadDeadline(time.Now().Add(g.config.ReadTimeout))
 
 		hdr, err := rd.NextFrame()
 		if err != nil {
@@ -145,7 +145,7 @@ func (g *Goctopus) handleAck(c *client, payload []byte) {
 // pingLoop periodically pings the client. A failing write means the connection
 // is gone, so it stops (readLoop's deadline will also fire and clean up).
 func (g *Goctopus) pingLoop(c *client) {
-	ticker := time.NewTicker(g.pingInterval)
+	ticker := time.NewTicker(g.config.PingInterval)
 	defer ticker.Stop()
 	for range ticker.C {
 		if err := c.writePing(); err != nil {

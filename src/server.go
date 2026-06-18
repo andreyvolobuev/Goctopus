@@ -4,8 +4,6 @@ import (
 	"crypto/subtle"
 	"fmt"
 	"net/http"
-	"os"
-	"strconv"
 
 	"github.com/gobwas/ws"
 	"github.com/google/uuid"
@@ -104,7 +102,7 @@ func (g *Goctopus) handlePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	m := Message{}
-	if err := m.unmarshal(r.Body); err != nil {
+	if err := m.unmarshal(r.Body, g.config.DefaultExpire); err != nil {
 		g.Log(ERR_TEMPLATE, err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -123,15 +121,15 @@ func (g *Goctopus) handlePost(w http.ResponseWriter, r *http.Request) {
 }
 
 // authorizePost enforces Basic Auth for backend POST requests. It fails closed:
-// unless WS_INSECURE_NO_AUTH is explicitly enabled, missing or empty
-// credentials cause the request to be rejected rather than silently accepted.
+// unless InsecureNoAuth is explicitly enabled, missing or empty credentials
+// cause the request to be rejected rather than silently accepted.
 func (g *Goctopus) authorizePost(w http.ResponseWriter, r *http.Request) bool {
-	if insecure, _ := strconv.ParseBool(os.Getenv(WS_INSECURE_NO_AUTH)); insecure {
+	if g.config.InsecureNoAuth {
 		return true
 	}
 
-	login := os.Getenv(WS_LOGIN)
-	pass := os.Getenv(WS_PASSWORD)
+	login := g.config.Login
+	pass := g.config.Password
 	if login == EMPTY_STR || pass == EMPTY_STR {
 		g.Log(NO_CREDS_FOR_POST)
 		g.metrics.authFail.Add(1)

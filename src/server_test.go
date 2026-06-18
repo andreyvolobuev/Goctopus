@@ -71,9 +71,7 @@ func TestUnknownPathReturns404(t *testing.T) {
 // H1 regression: when credentials are configured, an unauthenticated POST must
 // be rejected.
 func TestPostWithoutCredentialsRejectedWhenConfigured(t *testing.T) {
-	app := newTestApp(t)
-	t.Setenv(WS_LOGIN, "admin")
-	t.Setenv(WS_PASSWORD, "secret")
+	app := newTestAppCfg(t, withCreds)
 
 	body := strings.NewReader(`{"key":"k","value":{"a":1}}`)
 	req := httptest.NewRequest(http.MethodPost, "/", body)
@@ -104,9 +102,7 @@ func TestPostWithoutConfiguredCredentialsFailsClosed(t *testing.T) {
 
 // A valid authenticated POST queues a message that can then be read back.
 func TestPostThenGetMessage(t *testing.T) {
-	app := newTestApp(t)
-	t.Setenv(WS_LOGIN, "admin")
-	t.Setenv(WS_PASSWORD, "secret")
+	app := newTestAppCfg(t, withCreds)
 
 	body := strings.NewReader(`{"key":"alice","value":{"hello":"world"},"expire":"30m"}`)
 	req := httptest.NewRequest(http.MethodPost, "/", body)

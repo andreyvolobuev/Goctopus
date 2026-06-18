@@ -13,7 +13,7 @@ func (d *DummyAuthorizer) Authorize(g *Goctopus, r *http.Request) ([]string, err
 	return d.keys, nil
 }
 
-func (d *DummyAuthorizer) Init() error {
-	d.keys = []string{authUrl}
+func (d *DummyAuthorizer) Init(cfg *Config) error {
+	d.keys = []string{cfg.AuthURL}
 	return nil
 }

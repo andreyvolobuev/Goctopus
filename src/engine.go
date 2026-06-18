@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"hash/fnv"
 	"log"
-	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -39,13 +37,13 @@ type Goctopus struct {
 	storage    Storage
 	authorizer Authorizer
 
-	pingInterval time.Duration
-	readTimeout  time.Duration
+	config *Config
 
 	metrics metrics
 }
 
-func (g *Goctopus) Start() {
+func (g *Goctopus) Start(cfg *Config) {
+	g.config = cfg
 	g.Log(START_APP)
 
 	g.storage = g.getStorage()
@@ -54,15 +52,11 @@ func (g *Goctopus) Start() {
 	g.Conns = make(map[string][]*client)
 	g.patterns = make(map[string]bool)
 
-	n_workers, err := strconv.Atoi(os.Getenv(WS_WORKERS))
-	if err != nil {
+	if cfg.Workers <= 0 {
 		panic(WS_WORKERS_NOT_FOUND)
 	}
-	g.sem = make(chan struct{}, n_workers)
+	g.sem = make(chan struct{}, cfg.Workers)
 	g.work = make(chan func())
-
-	g.pingInterval = envDuration(WS_PING_INTERVAL, 30*time.Second)
-	g.readTimeout = envDuration(WS_READ_TIMEOUT, 70*time.Second)
 
 	// If the storage backend supports cross-instance notifications (Redis),
 	// flush a key locally whenever any instance reports new messages for it.
@@ -84,16 +78,6 @@ func (g *Goctopus) notify(key string) {
 			g.Log(REDIS_NOTIFY_ERR, key, err)
 		}
 	}
-}
-
-// envDuration parses a duration from an environment variable, falling back to
-// def when unset or invalid.
-func envDuration(name string, def time.Duration) time.Duration {
-	d, err := time.ParseDuration(os.Getenv(name))
-	if err != nil || d <= 0 {
-		return def
-	}
-	return d
 }
 
 // sendLock returns the mutex that serializes delivery for a given key.
@@ -256,38 +240,36 @@ func (g *Goctopus) queueMessage(m Message) {
 }
 
 func (g *Goctopus) Log(format string, v ...any) {
-	verbose, err := strconv.ParseBool(os.Getenv(WS_VERBOSE))
-	if err != nil {
-		verbose = false
-	}
-	if verbose {
+	if g.config != nil && g.config.Verbose {
 		log.Printf(format+"\n", v...)
 	}
 }
 
 func (g *Goctopus) getStorage() Storage {
-	factory, ok := Storages[strings.ToLower(storageEngine)]
+	engine := strings.ToLower(g.config.StorageEngine)
+	factory, ok := Storages[engine]
 	if !ok {
-		panic(fmt.Sprintf(UNKNOWN_STORAGE, storageEngine))
+		panic(fmt.Sprintf(UNKNOWN_STORAGE, g.config.StorageEngine))
 	}
 	m := factory()
-	if err := m.Init(); err != nil {
-		panic(fmt.Sprintf(STORAGE_INIT_ERR, storageEngine, err))
+	if err := m.Init(g.config); err != nil {
+		panic(fmt.Sprintf(STORAGE_INIT_ERR, g.config.StorageEngine, err))
 	}
-	g.Log(STORAGE_INITIALIZED, storageEngine)
+	g.Log(STORAGE_INITIALIZED, g.config.StorageEngine)
 	return m
 }
 
 func (g *Goctopus) getAuthorizer() Authorizer {
-	factory, ok := Authorizers[strings.ToLower(authorizerEngine)]
+	engine := strings.ToLower(g.config.AuthorizerEngine)
+	factory, ok := Authorizers[engine]
 	if !ok {
-		panic(fmt.Sprintf(UNKNOWN_AUTHORIZER, authorizerEngine))
+		panic(fmt.Sprintf(UNKNOWN_AUTHORIZER, g.config.AuthorizerEngine))
 	}
 	a := factory()
-	if err := a.Init(); err != nil {
-		panic(fmt.Sprintf(AUTHORIZER_INIT_ERR, authorizerEngine, err))
+	if err := a.Init(g.config); err != nil {
+		panic(fmt.Sprintf(AUTHORIZER_INIT_ERR, g.config.AuthorizerEngine, err))
 	}
-	g.Log(AUTHORIZER_INITIALIZED, authorizerEngine)
+	g.Log(AUTHORIZER_INITIALIZED, g.config.AuthorizerEngine)
 	return a
 }
 
@@ -358,11 +340,7 @@ func (g *Goctopus) deleteMsgByIdLocked(key string, id uuid.UUID) error {
 // sweepExpired periodically removes expired messages from storage so that keys
 // nobody ever reconnects to don't leak memory forever.
 func (g *Goctopus) sweepExpired() {
-	d, err := time.ParseDuration(os.Getenv(WS_SWEEP_INTERVAL))
-	if err != nil || d <= 0 {
-		d = time.Minute
-	}
-	ticker := time.NewTicker(d)
+	ticker := time.NewTicker(g.config.SweepInterval)
 	defer ticker.Stop()
 
 	for range ticker.C {

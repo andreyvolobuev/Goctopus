@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"os"
 	"time"
 
 	"github.com/google/uuid"
@@ -37,7 +36,7 @@ func (m *Message) marshal(extended bool) ([]byte, error) {
 	return data, err
 }
 
-func (m *Message) unmarshal(data io.ReadCloser) error {
+func (m *Message) unmarshal(data io.ReadCloser, defaultExpire string) error {
 	defer data.Close()
 
 	b, err := io.ReadAll(data)
@@ -58,7 +57,7 @@ func (m *Message) unmarshal(data io.ReadCloser) error {
 	}
 
 	if m.Expire == EMPTY_STR {
-		m.Expire = os.Getenv(WS_MSG_EXPIRE)
+		m.Expire = defaultExpire
 	}
 
 	if _, err := time.ParseDuration(m.Expire); err != nil {

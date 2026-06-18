@@ -1,7 +1,7 @@
 package main
 
 type Storage interface {
-	Init() error
+	Init(*Config) error
 	// Initialize storage. Perform all the checks. Maybe connect to database.
 
 	SetQueue(string, []Message) error

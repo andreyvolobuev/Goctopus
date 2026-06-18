@@ -11,7 +11,6 @@ package main
 
 import (
 	"context"
-	"os"
 	"strings"
 	"time"
 
@@ -32,8 +31,8 @@ type RedisStorage struct {
 
 func (s *RedisStorage) queueKey(key string) string { return redisQueuePfx + key }
 
-func (s *RedisStorage) Init() error {
-	url := os.Getenv(WS_REDIS_URL)
+func (s *RedisStorage) Init(cfg *Config) error {
+	url := cfg.RedisURL
 	if url == EMPTY_STR {
 		url = redisDefaultURL
 	}

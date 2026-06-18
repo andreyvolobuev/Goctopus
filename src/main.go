@@ -8,143 +8,89 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 )
 
-var (
-	host, port, workers, expire, login, password, authUrl, verbose, storageEngine, authorizerEngine string
-	insecureNoAuth, authTimeout, sweepInterval                                                      string
-	pingInterval, readTimeout, redisUrl                                                             string
-	tlsCert, tlsKey                                                                                 string
-)
+// envOr returns the value of an environment variable or a default.
+func envOr(name, def string) string {
+	if v, ok := os.LookupEnv(name); ok {
+		return v
+	}
+	return def
+}
 
 func main() {
-	// TODO: MOVE ALL OF THESE LITERALS TO CONSTANTS
-
-	hostDefault, ok := os.LookupEnv(WS_HOST)
-	if !ok {
-		hostDefault = "0.0.0.0"
-	}
-	flag.StringVar(&host, "host", hostDefault, "Hostname to listen to")
-
-	portDefault, ok := os.LookupEnv(WS_PORT)
-	if !ok {
-		portDefault = "7890"
-	}
-	flag.StringVar(&port, "port", portDefault, "Port to listen to")
-
-	workersDefault, ok := os.LookupEnv(WS_WORKERS)
-	if !ok {
-		workersDefault = "1024"
-	}
-	flag.StringVar(&workers, "workers", workersDefault, "N workers (goroutines) that will handle websocket requests")
-
-	expireDefault, ok := os.LookupEnv(WS_MSG_EXPIRE)
-	if !ok {
-		expireDefault = "30m"
-	}
-	flag.StringVar(&expire, "expire", expireDefault, "Time to wait before message expires")
-
-	flag.StringVar(&login, "login", os.Getenv(WS_LOGIN), "Login to authorize sending websocket messages")
-	flag.StringVar(&password, "password", os.Getenv(WS_PASSWORD), "Password to authorize sending websocket messages")
-
-	flag.StringVar(&authUrl, "auth", os.Getenv(WS_AUTH_URL), "URL to forward websockets requests to in order to obtain user's identifier")
-
-	verboseDefault, ok := os.LookupEnv(WS_VERBOSE)
-	if !ok {
-		verboseDefault = "False"
-	}
-	flag.StringVar(&verbose, "verbose", verboseDefault, "Whether or not log everything to console")
-
-	storageDefault, ok := os.LookupEnv(WS_STORAGE)
-	if !ok {
-		storageDefault = DEFAULT
-	}
-	flag.StringVar(&storageEngine, "storage", storageDefault, "Storage engine that is used to keep message queues")
-
-	authorizerDefault, ok := os.LookupEnv(WS_AUTHORIZER)
-	if !ok {
-		authorizerDefault = DEFAULT
-	}
-	flag.StringVar(&authorizerEngine, "authorizer", authorizerDefault, "Authorizer engine that is used to authorize incomming http requests")
-
-	insecureDefault, ok := os.LookupEnv(WS_INSECURE_NO_AUTH)
-	if !ok {
-		insecureDefault = "false"
-	}
-	flag.StringVar(&insecureNoAuth, "insecure-no-auth", insecureDefault, "Allow unauthenticated POST requests (DEVELOPMENT ONLY)")
-
-	authTimeoutDefault, ok := os.LookupEnv(WS_AUTH_TIMEOUT)
-	if !ok {
-		authTimeoutDefault = "10s"
-	}
-	flag.StringVar(&authTimeout, "auth-timeout", authTimeoutDefault, "Timeout for requests to the auth backend")
-
-	sweepDefault, ok := os.LookupEnv(WS_SWEEP_INTERVAL)
-	if !ok {
-		sweepDefault = "1m"
-	}
-	flag.StringVar(&sweepInterval, "sweep-interval", sweepDefault, "How often expired messages are swept from storage")
-
-	pingDefault, ok := os.LookupEnv(WS_PING_INTERVAL)
-	if !ok {
-		pingDefault = "30s"
-	}
-	flag.StringVar(&pingInterval, "ping-interval", pingDefault, "How often to ping idle websocket connections (keepalive)")
-
-	readTimeoutDefault, ok := os.LookupEnv(WS_READ_TIMEOUT)
-	if !ok {
-		readTimeoutDefault = "70s"
-	}
-	flag.StringVar(&readTimeout, "read-timeout", readTimeoutDefault, "Drop a websocket connection if no frame (incl. pong) arrives within this time")
-
-	redisDefault, ok := os.LookupEnv(WS_REDIS_URL)
-	if !ok {
-		redisDefault = "redis://localhost:6379/0"
-	}
-	flag.StringVar(&redisUrl, "redis-url", redisDefault, "Redis connection URL when --storage=redis")
-
-	flag.StringVar(&tlsCert, "tls-cert", os.Getenv(WS_TLS_CERT), "Path to TLS certificate file. Set together with --tls-key to serve over TLS (wss://)")
-	flag.StringVar(&tlsKey, "tls-key", os.Getenv(WS_TLS_KEY), "Path to TLS private key file")
-
+	var (
+		host             = flag.String("host", envOr(WS_HOST, "0.0.0.0"), "Hostname to listen to")
+		port             = flag.String("port", envOr(WS_PORT, "7890"), "Port to listen to")
+		workers          = flag.String("workers", envOr(WS_WORKERS, "1024"), "N workers (goroutines) that will handle websocket requests")
+		expire           = flag.String("expire", envOr(WS_MSG_EXPIRE, "30m"), "Default time to wait before a message expires")
+		login            = flag.String("login", os.Getenv(WS_LOGIN), "Login to authorize sending websocket messages")
+		password         = flag.String("password", os.Getenv(WS_PASSWORD), "Password to authorize sending websocket messages")
+		authURL          = flag.String("auth", os.Getenv(WS_AUTH_URL), "URL to forward websocket requests to in order to obtain user's identifier")
+		verbose          = flag.String("verbose", envOr(WS_VERBOSE, "false"), "Whether or not to log everything to console")
+		storageEngine    = flag.String("storage", envOr(WS_STORAGE, DEFAULT), "Storage engine used to keep message queues (memory/redis)")
+		authorizerEngine = flag.String("authorizer", envOr(WS_AUTHORIZER, DEFAULT), "Authorizer engine used to authorize incoming requests (proxy/dummy)")
+		insecureNoAuth   = flag.String("insecure-no-auth", envOr(WS_INSECURE_NO_AUTH, "false"), "Allow unauthenticated POST requests (DEVELOPMENT ONLY)")
+		authTimeout      = flag.String("auth-timeout", envOr(WS_AUTH_TIMEOUT, "10s"), "Timeout for requests to the auth backend")
+		sweepInterval    = flag.String("sweep-interval", envOr(WS_SWEEP_INTERVAL, "1m"), "How often expired messages are swept from storage")
+		pingInterval     = flag.String("ping-interval", envOr(WS_PING_INTERVAL, "30s"), "How often to ping idle websocket connections (keepalive)")
+		readTimeout      = flag.String("read-timeout", envOr(WS_READ_TIMEOUT, "70s"), "Drop a websocket connection if no frame (incl. pong) arrives within this time")
+		redisURL         = flag.String("redis-url", envOr(WS_REDIS_URL, "redis://localhost:6379/0"), "Redis connection URL when --storage=redis")
+		tlsCert          = flag.String("tls-cert", os.Getenv(WS_TLS_CERT), "Path to TLS certificate file. Set with --tls-key to serve over TLS (wss://)")
+		tlsKey           = flag.String("tls-key", os.Getenv(WS_TLS_KEY), "Path to TLS private key file")
+	)
 	flag.Parse()
 
-	os.Setenv(WS_WORKERS, workers)
-	os.Setenv(WS_MSG_EXPIRE, expire)
-	os.Setenv(WS_LOGIN, login)
-	os.Setenv(WS_PASSWORD, password)
-	os.Setenv(WS_VERBOSE, verbose)
-	os.Setenv(WS_INSECURE_NO_AUTH, insecureNoAuth)
-	os.Setenv(WS_AUTH_TIMEOUT, authTimeout)
-	os.Setenv(WS_SWEEP_INTERVAL, sweepInterval)
-	os.Setenv(WS_PING_INTERVAL, pingInterval)
-	os.Setenv(WS_READ_TIMEOUT, readTimeout)
-	os.Setenv(WS_REDIS_URL, redisUrl)
-
-	if authUrl == EMPTY_STR {
+	if *authURL == EMPTY_STR {
 		panic("You must set URL for authenticating incoming websocket requests. You may do that by setting WS_AUTH_URL environment variable or by running goctopus with --auth flag")
 	}
-	os.Setenv(WS_AUTH_URL, authUrl)
+
+	nWorkers, err := strconv.Atoi(*workers)
+	if err != nil {
+		panic(WS_WORKERS_NOT_FOUND)
+	}
+
+	cfg := &Config{
+		Host:             *host,
+		Port:             *port,
+		Workers:          nWorkers,
+		DefaultExpire:    *expire,
+		Verbose:          parseBool(*verbose),
+		Login:            *login,
+		Password:         *password,
+		InsecureNoAuth:   parseBool(*insecureNoAuth),
+		StorageEngine:    *storageEngine,
+		AuthorizerEngine: *authorizerEngine,
+		AuthURL:          *authURL,
+		AuthTimeout:      parseDurationOr(*authTimeout, 10*time.Second),
+		RedisURL:         *redisURL,
+		SweepInterval:    parseDurationOr(*sweepInterval, time.Minute),
+		PingInterval:     parseDurationOr(*pingInterval, 30*time.Second),
+		ReadTimeout:      parseDurationOr(*readTimeout, 70*time.Second),
+		TLSCert:          *tlsCert,
+		TLSKey:           *tlsKey,
+	}
 
 	app := Goctopus{}
-	app.Start()
+	app.Start(cfg)
 
 	fmt.Printf("----------------------------------\n")
 	fmt.Printf("Goctopus websocket app has started\n")
-	fmt.Printf("Listening to: %s:%s\n", host, port)
-	fmt.Printf("Num workers is: %s\n", os.Getenv(WS_WORKERS))
-	fmt.Printf("Storage is: %s\n", storageEngine)
-	fmt.Printf("Authorizer engine: %s\n", authorizerEngine)
-	fmt.Printf("Default message expiry is: %s\n", os.Getenv(WS_MSG_EXPIRE))
-	tlsEnabled := tlsCert != EMPTY_STR && tlsKey != EMPTY_STR
-	if tlsEnabled {
+	fmt.Printf("Listening to: %s:%s\n", cfg.Host, cfg.Port)
+	fmt.Printf("Num workers is: %d\n", cfg.Workers)
+	fmt.Printf("Storage is: %s\n", cfg.StorageEngine)
+	fmt.Printf("Authorizer engine: %s\n", cfg.AuthorizerEngine)
+	fmt.Printf("Default message expiry is: %s\n", cfg.DefaultExpire)
+	if cfg.tlsEnabled() {
 		fmt.Printf("TLS: enabled (wss://)\n")
 	}
 	fmt.Printf("----------------------------------\n\n")
 
 	srv := &http.Server{
-		Addr:    fmt.Sprintf("%s:%s", host, port),
+		Addr:    fmt.Sprintf("%s:%s", cfg.Host, cfg.Port),
 		Handler: &app,
 	}
 
@@ -166,9 +112,9 @@ func main() {
 	}()
 
 	var serveErr error
-	if tlsEnabled {
+	if cfg.tlsEnabled() {
 		// Serving over TLS makes the websocket endpoint available as wss://.
-		serveErr = srv.ListenAndServeTLS(tlsCert, tlsKey)
+		serveErr = srv.ListenAndServeTLS(cfg.TLSCert, cfg.TLSKey)
 	} else {
 		serveErr = srv.ListenAndServe()
 	}

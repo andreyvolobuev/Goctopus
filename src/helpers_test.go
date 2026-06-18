@@ -1,37 +1,57 @@
 package main
 
 import (
-	"os"
 	"testing"
+	"time"
 )
 
-// newTestApp builds a Goctopus instance wired to the in-memory storage and the
-// dummy authorizer so tests can run without an external auth backend.
+// testConfig returns a Config wired to the in-memory storage and the dummy
+// authorizer (registering connections under key, which may be a wildcard
+// pattern) so tests can run without external dependencies. Keepalive pings are
+// pushed far out so they don't interfere with frame-reading assertions.
+func testConfig(key string) *Config {
+	return &Config{
+		Workers:          8,
+		DefaultExpire:    "30m",
+		Verbose:          false,
+		StorageEngine:    MEMORY,
+		AuthorizerEngine: DUMMY,
+		AuthURL:          key,
+		SweepInterval:    time.Minute,
+		PingInterval:     time.Hour,
+		ReadTimeout:      30 * time.Second,
+		AuthTimeout:      10 * time.Second,
+	}
+}
+
+// withCreds configures backend POST credentials on a test config.
+func withCreds(c *Config) {
+	c.Login = "admin"
+	c.Password = "secret"
+}
+
+// newTestApp builds a Goctopus instance with the default test config.
 func newTestApp(t *testing.T) *Goctopus {
-	return newTestAppWithKey(t, "testkey")
+	return newTestAppCfg(t, nil)
 }
 
 // newTestAppWithKey builds a test app whose dummy authorizer registers every
-// connection under the given key (which may be a wildcard pattern). The key is
-// set before Start so it is captured once and never read across goroutines.
+// connection under the given key.
 func newTestAppWithKey(t *testing.T, key string) *Goctopus {
+	return newTestAppCfg(t, func(c *Config) { c.AuthURL = key })
+}
+
+// newTestAppCfg builds and starts a test app, letting the caller tweak the
+// config before Start (so it is captured once and never mutated across
+// goroutines).
+func newTestAppCfg(t *testing.T, mutate func(*Config)) *Goctopus {
 	t.Helper()
-
-	os.Setenv(WS_WORKERS, "8")
-	os.Setenv(WS_VERBOSE, "false")
-	os.Setenv(WS_MSG_EXPIRE, "30m")
-	os.Setenv(WS_LOGIN, EMPTY_STR)
-	os.Setenv(WS_PASSWORD, EMPTY_STR)
-	// Keep keepalive pings out of the way of frame-reading assertions.
-	os.Setenv(WS_PING_INTERVAL, "1h")
-	os.Setenv(WS_READ_TIMEOUT, "30s")
-
-	storageEngine = MEMORY
-	authorizerEngine = DUMMY
-	authUrl = key
-
+	cfg := testConfig("testkey")
+	if mutate != nil {
+		mutate(cfg)
+	}
 	app := &Goctopus{}
-	app.Start()
+	app.Start(cfg)
 	return app
 }
 

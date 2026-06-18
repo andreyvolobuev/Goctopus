@@ -2,7 +2,6 @@ package main
 
 import (
 	"io"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -11,9 +10,8 @@ import (
 func body(s string) io.ReadCloser { return io.NopCloser(strings.NewReader(s)) }
 
 func TestUnmarshalValidMessage(t *testing.T) {
-	os.Setenv(WS_MSG_EXPIRE, "30m")
 	m := Message{}
-	if err := m.unmarshal(body(`{"key":"k","value":{"a":1},"expire":"5m"}`)); err != nil {
+	if err := m.unmarshal(body(`{"key":"k","value":{"a":1},"expire":"5m"}`), "30m"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if m.Key != "k" {
@@ -29,22 +27,21 @@ func TestUnmarshalValidMessage(t *testing.T) {
 
 func TestUnmarshalMissingKey(t *testing.T) {
 	m := Message{}
-	if err := m.unmarshal(body(`{"value":{"a":1}}`)); err == nil {
+	if err := m.unmarshal(body(`{"value":{"a":1}}`), "30m"); err == nil {
 		t.Fatal("expected error for missing key")
 	}
 }
 
 func TestUnmarshalMissingValue(t *testing.T) {
 	m := Message{}
-	if err := m.unmarshal(body(`{"key":"k"}`)); err == nil {
+	if err := m.unmarshal(body(`{"key":"k"}`), "30m"); err == nil {
 		t.Fatal("expected error for missing value")
 	}
 }
 
 func TestUnmarshalDefaultsExpire(t *testing.T) {
-	os.Setenv(WS_MSG_EXPIRE, "42m")
 	m := Message{}
-	if err := m.unmarshal(body(`{"key":"k","value":1}`)); err != nil {
+	if err := m.unmarshal(body(`{"key":"k","value":1}`), "42m"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if m.Expire != "42m" {
@@ -56,7 +53,7 @@ func TestUnmarshalDefaultsExpire(t *testing.T) {
 // making the message expire immediately.
 func TestUnmarshalRejectsInvalidExpire(t *testing.T) {
 	m := Message{}
-	if err := m.unmarshal(body(`{"key":"k","value":1,"expire":"banana"}`)); err == nil {
+	if err := m.unmarshal(body(`{"key":"k","value":1,"expire":"banana"}`), "30m"); err == nil {
 		t.Fatal("expected error for invalid expire duration")
 	}
 }

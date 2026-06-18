@@ -67,9 +67,7 @@ func waitFor(t *testing.T, cond func() bool, msg string) {
 // End-to-end: a websocket client connects, a backend POST is delivered to it,
 // the client ACKs, and the message is then removed from the queue.
 func TestWebsocketDeliveryAndAck(t *testing.T) {
-	app := newTestApp(t)
-	t.Setenv(WS_LOGIN, "admin")
-	t.Setenv(WS_PASSWORD, "secret")
+	app := newTestAppCfg(t, withCreds)
 	ts := httptest.NewServer(app)
 	defer ts.Close()
 
@@ -113,9 +111,7 @@ func TestWebsocketDeliveryAndAck(t *testing.T) {
 // Without an ACK the message stays queued (at-least-once semantics) and is not
 // re-pushed to the same live connection (in-flight de-duplication).
 func TestWebsocketNoDuplicateWhileInFlight(t *testing.T) {
-	app := newTestApp(t)
-	t.Setenv(WS_LOGIN, "admin")
-	t.Setenv(WS_PASSWORD, "secret")
+	app := newTestAppCfg(t, withCreds)
 	ts := httptest.NewServer(app)
 	defer ts.Close()
 
@@ -152,9 +148,7 @@ func TestWebsocketNoDuplicateWhileInFlight(t *testing.T) {
 // A connection subscribed to a wildcard pattern receives messages published to
 // any matching concrete key.
 func TestWebsocketWildcardDelivery(t *testing.T) {
-	app := newTestAppWithKey(t, "org.*") // dummy authorizer registers under this pattern
-	t.Setenv(WS_LOGIN, "admin")
-	t.Setenv(WS_PASSWORD, "secret")
+	app := newTestAppCfg(t, func(c *Config) { c.AuthURL = "org.*"; withCreds(c) }) // pattern + creds
 	ts := httptest.NewServer(app)
 	defer ts.Close()
 
@@ -183,9 +177,7 @@ func TestWebsocketWildcardDelivery(t *testing.T) {
 // A wildcard subscriber connecting after messages were queued receives the
 // existing backlog for matching keys.
 func TestWebsocketWildcardBacklog(t *testing.T) {
-	app := newTestAppWithKey(t, "org.*")
-	t.Setenv(WS_LOGIN, "admin")
-	t.Setenv(WS_PASSWORD, "secret")
+	app := newTestAppCfg(t, func(c *Config) { c.AuthURL = "org.*"; withCreds(c) })
 	ts := httptest.NewServer(app)
 	defer ts.Close()
 
@@ -214,9 +206,7 @@ func TestWebsocketWildcardBacklog(t *testing.T) {
 
 // The handler works over TLS, i.e. clients can connect with wss://.
 func TestWebsocketOverTLS(t *testing.T) {
-	app := newTestApp(t)
-	t.Setenv(WS_LOGIN, "admin")
-	t.Setenv(WS_PASSWORD, "secret")
+	app := newTestAppCfg(t, withCreds)
 	ts := httptest.NewTLSServer(app)
 	defer ts.Close()
 
@@ -245,8 +235,7 @@ func TestWebsocketOverTLS(t *testing.T) {
 
 // The server proactively pings idle connections for keepalive.
 func TestWebsocketServerSendsPing(t *testing.T) {
-	app := newTestApp(t)
-	app.pingInterval = 30 * time.Millisecond
+	app := newTestAppCfg(t, func(c *Config) { c.PingInterval = 30 * time.Millisecond })
 	ts := httptest.NewServer(app)
 	defer ts.Close()
 

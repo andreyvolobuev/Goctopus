@@ -1,7 +1,6 @@
 package main
 
 import (
-	"os"
 	"sort"
 	"testing"
 	"time"
@@ -13,9 +12,8 @@ import (
 func newRedisStorage(t *testing.T) *RedisStorage {
 	t.Helper()
 	mr := miniredis.RunT(t)
-	os.Setenv(WS_REDIS_URL, "redis://"+mr.Addr())
 	s := &RedisStorage{}
-	if err := s.Init(); err != nil {
+	if err := s.Init(&Config{RedisURL: "redis://" + mr.Addr()}); err != nil {
 		t.Fatalf("init: %v", err)
 	}
 	return s

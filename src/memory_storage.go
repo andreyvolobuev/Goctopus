@@ -9,7 +9,7 @@ type MemoryStorage struct {
 	storage map[string][]Message
 }
 
-func (s *MemoryStorage) Init() error {
+func (s *MemoryStorage) Init(cfg *Config) error {
 	s.storage = make(map[string][]Message)
 	return nil
 }
