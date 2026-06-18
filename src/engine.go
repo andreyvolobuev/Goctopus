@@ -406,14 +406,9 @@ func (g *Goctopus) deleteMsgById(key string, id uuid.UUID) error {
 // g.mu. sync.Mutex is not reentrant, so calling deleteMsgById (which locks)
 // while already holding g.mu would deadlock.
 func (g *Goctopus) deleteMsgByIdLocked(key string, id uuid.UUID) error {
-	queue, err := g.getMsgQueue(key)
-	if err != nil {
+	if err := g.storage.DeleteMessage(key, id); err != nil {
+		g.Log(ERR_TEMPLATE, err)
 		return err
-	}
-	for i, msg := range queue {
-		if msg.id == id {
-			return g.updateMsgQueue(key, append(queue[:i], queue[i+1:]...))
-		}
 	}
 	return nil
 }

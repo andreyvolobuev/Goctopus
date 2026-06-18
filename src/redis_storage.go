@@ -11,9 +11,11 @@ package main
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -57,14 +59,14 @@ func (s *RedisStorage) SetQueue(key string, queue []Message) error {
 		if err != nil {
 			return err
 		}
-		pipe.RPush(s.ctx, qk, b)
+		pipe.HSet(s.ctx, qk, m.id.String(), b)
 	}
 	_, err := pipe.Exec(s.ctx)
 	return err
 }
 
 func (s *RedisStorage) GetQueue(key string) ([]Message, error) {
-	vals, err := s.client.LRange(s.ctx, s.queueKey(key), 0, -1).Result()
+	vals, err := s.client.HGetAll(s.ctx, s.queueKey(key)).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -76,6 +78,8 @@ func (s *RedisStorage) GetQueue(key string) ([]Message, error) {
 		}
 		queue = append(queue, m)
 	}
+	// A hash has no order; restore FIFO order by message timestamp.
+	sort.Slice(queue, func(i, j int) bool { return queue[i].date.Before(queue[j].date) })
 	return queue, nil
 }
 
@@ -88,7 +92,13 @@ func (s *RedisStorage) AddMessage(key string, m Message) error {
 	if err != nil {
 		return err
 	}
-	return s.client.RPush(s.ctx, s.queueKey(key), b).Err()
+	// O(1) insert into the per-key hash, field = message id.
+	return s.client.HSet(s.ctx, s.queueKey(key), m.id.String(), b).Err()
+}
+
+// DeleteMessage removes a single message by id in O(1) (HDEL).
+func (s *RedisStorage) DeleteMessage(key string, id uuid.UUID) error {
+	return s.client.HDel(s.ctx, s.queueKey(key), id.String()).Err()
 }
 
 func (s *RedisStorage) GetKeys() ([]string, error) {

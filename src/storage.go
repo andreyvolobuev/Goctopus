@@ -1,6 +1,10 @@
 package main
 
-import "context"
+import (
+	"context"
+
+	"github.com/google/uuid"
+)
 
 type Storage interface {
 	Init(*Config) error
@@ -17,6 +21,9 @@ type Storage interface {
 
 	AddMessage(string, Message) error
 	// Append message to a queue retrieved by it's key
+
+	DeleteMessage(string, uuid.UUID) error
+	// Remove a single message by id from a key's queue (O(1) where possible)
 
 	GetKeys() ([]string, error)
 	// Return list of all available keys

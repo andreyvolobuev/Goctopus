@@ -90,6 +90,22 @@ func TestRedisDeleteQueueAndKeys(t *testing.T) {
 	}
 }
 
+func TestRedisDeleteMessage(t *testing.T) {
+	s := newRedisStorage(t)
+	keep := uuid.New()
+	drop := uuid.New()
+	s.AddMessage("k", Message{id: keep, Key: "k", Value: 1, Expire: "1m", date: time.Now()})
+	s.AddMessage("k", Message{id: drop, Key: "k", Value: 2, Expire: "1m", date: time.Now().Add(time.Second)})
+
+	if err := s.DeleteMessage("k", drop); err != nil {
+		t.Fatalf("delete message: %v", err)
+	}
+	q, _ := s.GetQueue("k")
+	if len(q) != 1 || q[0].id != keep {
+		t.Fatalf("expected only the kept message, got %d items", len(q))
+	}
+}
+
 func TestRedisGetKeysEmpty(t *testing.T) {
 	s := newRedisStorage(t)
 	keys, err := s.GetKeys()

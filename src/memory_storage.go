@@ -5,6 +5,8 @@ package main
 // Upsides: fast
 // Downsides: not persistant
 
+import "github.com/google/uuid"
+
 type MemoryStorage struct {
 	storage map[string][]Message
 }
@@ -30,6 +32,22 @@ func (s *MemoryStorage) DeleteQueue(key string) error {
 
 func (s *MemoryStorage) AddMessage(key string, m Message) error {
 	s.storage[key] = append(s.storage[key], m)
+	return nil
+}
+
+func (s *MemoryStorage) DeleteMessage(key string, id uuid.UUID) error {
+	queue := s.storage[key]
+	for i, m := range queue {
+		if m.id == id {
+			queue = append(queue[:i], queue[i+1:]...)
+			if len(queue) == 0 {
+				delete(s.storage, key)
+			} else {
+				s.storage[key] = queue
+			}
+			return nil
+		}
+	}
 	return nil
 }
 
