@@ -6,15 +6,12 @@ import (
 	"fmt"
 	"hash/fnv"
 	"log"
-	"net"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/gobwas/ws"
-	"github.com/gobwas/ws/wsutil"
 	"github.com/google/uuid"
 )
 
@@ -24,7 +21,7 @@ import (
 const sendShards = 256
 
 type Goctopus struct {
-	Conns map[string][]net.Conn
+	Conns map[string][]*client
 
 	mu sync.Mutex
 
@@ -37,6 +34,9 @@ type Goctopus struct {
 	storage    Storage
 	authorizer Authorizer
 
+	pingInterval time.Duration
+	readTimeout  time.Duration
+
 	metrics metrics
 }
 
@@ -46,7 +46,7 @@ func (g *Goctopus) Start() {
 	g.storage = g.getStorage()
 	g.authorizer = g.getAuthorizer()
 
-	g.Conns = make(map[string][]net.Conn)
+	g.Conns = make(map[string][]*client)
 
 	n_workers, err := strconv.Atoi(os.Getenv(WS_WORKERS))
 	if err != nil {
@@ -55,7 +55,20 @@ func (g *Goctopus) Start() {
 	g.sem = make(chan struct{}, n_workers)
 	g.work = make(chan func())
 
+	g.pingInterval = envDuration(WS_PING_INTERVAL, 30*time.Second)
+	g.readTimeout = envDuration(WS_READ_TIMEOUT, 70*time.Second)
+
 	go g.sweepExpired()
+}
+
+// envDuration parses a duration from an environment variable, falling back to
+// def when unset or invalid.
+func envDuration(name string, def time.Duration) time.Duration {
+	d, err := time.ParseDuration(os.Getenv(name))
+	if err != nil || d <= 0 {
+		return def
+	}
+	return d
 }
 
 // sendLock returns the mutex that serializes delivery for a given key.
@@ -106,23 +119,26 @@ func (g *Goctopus) deleteMsgQueue(key string) {
 	}
 }
 
+// sendMessages pushes queued messages for a key to all of its connected
+// clients without blocking on acknowledgement. A message is written to a
+// connection at most once while in flight (see client.markInflight); it is only
+// removed from the queue when the client ACKs it (handleAck) or it expires
+// (sweepExpired). This makes delivery non-blocking and at-least-once.
 func (g *Goctopus) sendMessages(key string) {
 	g.Log(START_SENDING, key)
 
-	// Serialize delivery per key so a message is never delivered twice
-	// concurrently, without holding the global mutex during network I/O.
+	// Serialize delivery per key so concurrent flushes don't race, without
+	// holding the global mutex during network I/O.
 	sl := g.sendLock(key)
 	sl.Lock()
 	defer sl.Unlock()
 
-	// Snapshot connections and the queue under the global lock, then release it
-	// so the (slow, blocking) network I/O below never blocks other requests.
 	g.mu.Lock()
-	conns := append([]net.Conn(nil), g.Conns[key]...)
+	clients := append([]*client(nil), g.Conns[key]...)
 	msgQueue, err := g.getMsgQueue(key)
 	g.mu.Unlock()
 
-	if len(conns) == 0 {
+	if len(clients) == 0 {
 		g.Log(NO_CONNS, key)
 		return
 	}
@@ -135,19 +151,9 @@ func (g *Goctopus) sendMessages(key string) {
 		return
 	}
 
-	// Deliver outside any lock. Track which messages are done (delivered or
-	// expired) and which connections died so we can apply the result later.
-	done := make(map[uuid.UUID]bool)
-	dead := make(map[net.Conn]bool)
-
 	for _, msg := range msgQueue {
-		g.Log(TRY_SENDING_MSG, msg.id, msg.Value, key)
-
 		if msg.isExpired() {
-			g.Log(MSG_EXPIRED, msg.id)
-			g.metrics.expired.Add(1)
-			done[msg.id] = true
-			continue
+			continue // removed from storage by the sweeper
 		}
 
 		data, err := msg.marshal(false)
@@ -156,97 +162,18 @@ func (g *Goctopus) sendMessages(key string) {
 			continue
 		}
 
-		delivered := false
-		for _, conn := range conns {
-			if dead[conn] {
-				continue
+		for _, c := range clients {
+			if !c.markInflight(msg.id) {
+				continue // closed, or already sent and awaiting ACK
 			}
-			if err := g.sendMessage(conn, data, msg.id); err != nil {
+			g.Log(TRY_SENDING_MSG, msg.id, msg.Value, key)
+			if err := c.writeMessage(data); err != nil {
 				g.Log(CONN_ERR, err, key)
-				conn.Close()
-				dead[conn] = true
-				continue
-			}
-			delivered = true
-			g.metrics.delivered.Add(1)
-		}
-		if delivered {
-			done[msg.id] = true
-		}
-	}
-
-	// Apply results under the global lock. We rebuild the queue from its
-	// *current* contents minus the done ids so that messages queued
-	// concurrently during delivery are not lost.
-	g.mu.Lock()
-	defer g.mu.Unlock()
-
-	current, err := g.getMsgQueue(key)
-	if err == nil {
-		kept := make([]Message, 0, len(current))
-		for _, m := range current {
-			if !done[m.id] {
-				kept = append(kept, m)
+				c.clearInflight(msg.id)
+				c.close() // readLoop's defer unregisters it
 			}
 		}
-		if len(kept) == 0 {
-			g.deleteMsgQueue(key)
-			g.Log(ALL_SENT, key)
-		} else {
-			g.updateMsgQueue(key, kept)
-			g.Log(NOT_ALL_SENT, len(kept), key)
-		}
 	}
-
-	if len(dead) > 0 {
-		live := make([]net.Conn, 0, len(g.Conns[key]))
-		for _, conn := range g.Conns[key] {
-			if !dead[conn] {
-				live = append(live, conn)
-			}
-		}
-		if len(live) == 0 {
-			delete(g.Conns, key)
-			g.Log(ALL_CONNS_CLOSED, key)
-		} else {
-			g.Conns[key] = live
-			g.Log(NOT_ALL_CONNS_CLOSED, len(live), key)
-		}
-	}
-}
-
-func (g *Goctopus) sendMessage(c net.Conn, d []byte, id uuid.UUID) error {
-	if err := wsutil.WriteServerMessage(c, ws.OpText, d); err != nil {
-		return err
-	}
-	c.SetReadDeadline(time.Now().Add(time.Second * 1))
-	msg, _, err := wsutil.ReadClientData(c)
-	if err != nil {
-		return err
-	} else {
-		c.SetReadDeadline(time.Time{})
-	}
-	data := make(map[string]interface{})
-	err = json.Unmarshal(msg, &data)
-	if err != nil {
-		return err
-	}
-	id_, ok := data["id"].(string)
-	if !ok {
-		m := fmt.Sprintf(COULD_NOT_CONVERT_TO_ERR, BYTES)
-		return errors.New(m)
-	}
-	received_uuid, err := uuid.Parse(id_)
-	if err != nil {
-		m := fmt.Sprintf(COULD_NOT_CONVERT_TO_ERR, UUID)
-		return errors.New(m)
-	}
-	if id != received_uuid {
-		m := fmt.Sprintf(WRONG_ID_CONFIRM, id, received_uuid)
-		g.Log(m)
-		return errors.New(m)
-	}
-	return nil
 }
 
 func (g *Goctopus) queueMessage(m Message) {
@@ -258,14 +185,6 @@ func (g *Goctopus) queueMessage(m Message) {
 		g.Log(ERR_TEMPLATE, err)
 		return
 	}
-}
-
-func (g *Goctopus) newConn(key string, conn net.Conn) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-
-	g.Conns[key] = append(g.Conns[key], conn)
-	g.Log(SAVED_NEW_CONN, key)
 }
 
 func (g *Goctopus) Log(format string, v ...any) {

@@ -83,6 +83,8 @@ docker run \
 - WS_AUTH_URL (flag --auth): forward incomming requests from frontend to this URL in order to authorize a request or use this value as a dummy authorizer return
 - WS_AUTH_TIMEOUT (flag --auth-timeout): timeout for requests to the auth backend (default `10s`). Prevents a hung auth server from pinning a worker
 - WS_SWEEP_INTERVAL (flag --sweep-interval): how often expired messages are swept from storage in the background (default `1m`)
+- WS_PING_INTERVAL (flag --ping-interval): how often idle websocket connections are pinged for keepalive (default `30s`)
+- WS_READ_TIMEOUT (flag --read-timeout): drop a connection if no frame (including a pong) arrives within this time (default `70s`)
 - WS_INSECURE_NO_AUTH (flag --insecure-no-auth): allow unauthenticated POST requests. **DEVELOPMENT ONLY** — see Security below
 
 
@@ -177,10 +179,21 @@ Goctopus targets one specific niche: **add push without changing your backend's 
 - **Goctopus** deliberately stays tiny: HTTP in, websocket out, pluggable auth via your existing endpoint, at-least-once delivery with per-message TTL.
 
 
+### Delivery model
+
+Delivery is **asynchronous and at-least-once**. A backend POST queues a message and Goctopus writes it to every connected client for that key without blocking. Each connection has a dedicated read loop that:
+
+- removes a message from the queue when the client ACKs it (`{"id": "<id>"}`),
+- answers pings and treats pongs as keepalive,
+- unregisters the connection on close or read timeout.
+
+A message is written to a given connection at most once while awaiting its ACK (in-flight de-duplication), so re-flushing a key never spams already-pending messages. Unacked messages are re-delivered when the client reconnects, and expired messages are removed by the background sweeper. Because the same message id can still arrive after a reconnect, clients should de-duplicate by id (see the snippet above).
+
+
 ### Roadmap
 
 - [ ] Redis storage backend (interface is already in place — see [src/storage.go](src/storage.go)) for persistence and horizontal scaling
-- [ ] Asynchronous ACK protocol with per-connection read loop and ping/pong keepalive (replaces the current synchronous ACK)
+- [x] Asynchronous ACK protocol with per-connection read loop and ping/pong keepalive
 - [ ] Native TLS / `wss://` listener option
 - [ ] Wildcard topics and explicit broadcast vs direct messaging
 - [ ] Client SDKs (JS/TS, Python, Go) with built-in reconnect and de-duplication

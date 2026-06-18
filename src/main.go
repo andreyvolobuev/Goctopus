@@ -15,6 +15,7 @@ import (
 var (
 	host, port, workers, expire, login, password, authUrl, verbose, storageEngine, authorizerEngine string
 	insecureNoAuth, authTimeout, sweepInterval                                                      string
+	pingInterval, readTimeout                                                                       string
 )
 
 func main() {
@@ -85,6 +86,18 @@ func main() {
 	}
 	flag.StringVar(&sweepInterval, "sweep-interval", sweepDefault, "How often expired messages are swept from storage")
 
+	pingDefault, ok := os.LookupEnv(WS_PING_INTERVAL)
+	if !ok {
+		pingDefault = "30s"
+	}
+	flag.StringVar(&pingInterval, "ping-interval", pingDefault, "How often to ping idle websocket connections (keepalive)")
+
+	readTimeoutDefault, ok := os.LookupEnv(WS_READ_TIMEOUT)
+	if !ok {
+		readTimeoutDefault = "70s"
+	}
+	flag.StringVar(&readTimeout, "read-timeout", readTimeoutDefault, "Drop a websocket connection if no frame (incl. pong) arrives within this time")
+
 	flag.Parse()
 
 	os.Setenv(WS_WORKERS, workers)
@@ -95,6 +108,8 @@ func main() {
 	os.Setenv(WS_INSECURE_NO_AUTH, insecureNoAuth)
 	os.Setenv(WS_AUTH_TIMEOUT, authTimeout)
 	os.Setenv(WS_SWEEP_INTERVAL, sweepInterval)
+	os.Setenv(WS_PING_INTERVAL, pingInterval)
+	os.Setenv(WS_READ_TIMEOUT, readTimeout)
 
 	if authUrl == EMPTY_STR {
 		panic("You must set URL for authenticating incoming websocket requests. You may do that by setting WS_AUTH_URL environment variable or by running goctopus with --auth flag")

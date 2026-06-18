@@ -64,9 +64,20 @@ func (g *Goctopus) handleWs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	c := newClient(conn, keys)
+
+	g.mu.Lock()
+	for _, key := range keys {
+		g.Conns[key] = append(g.Conns[key], c)
+	}
+	g.mu.Unlock()
+	g.Log(SAVED_NEW_CONN, keys)
+
+	go g.readLoop(c)
+	go g.pingLoop(c)
+
 	g.schedule(func() {
 		for _, key := range keys {
-			g.newConn(key, conn)
 			g.sendMessages(key)
 		}
 	})

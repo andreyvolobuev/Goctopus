@@ -15,6 +15,9 @@ func newTestApp(t *testing.T) *Goctopus {
 	os.Setenv(WS_MSG_EXPIRE, "30m")
 	os.Setenv(WS_LOGIN, EMPTY_STR)
 	os.Setenv(WS_PASSWORD, EMPTY_STR)
+	// Keep keepalive pings out of the way of frame-reading assertions.
+	os.Setenv(WS_PING_INTERVAL, "1h")
+	os.Setenv(WS_READ_TIMEOUT, "30s")
 
 	storageEngine = MEMORY
 	authorizerEngine = DUMMY
