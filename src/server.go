@@ -54,6 +54,13 @@ func (g *Goctopus) handleHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (g *Goctopus) handleWs(w http.ResponseWriter, r *http.Request) {
+	// Reject cross-origin upgrades (CSWSH) before doing any work.
+	if origin := r.Header.Get(ORIGIN); !g.config.originAllowed(origin) {
+		g.Log(ORIGIN_REJECTED, origin)
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
 	keys, err := g.authorizer.Authorize(g, r)
 
 	if err != nil {

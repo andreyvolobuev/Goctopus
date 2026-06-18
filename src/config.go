@@ -34,6 +34,25 @@ type Config struct {
 
 	TLSCert string
 	TLSKey  string
+
+	// AllowedOrigins is the whitelist of browser Origins permitted to open a
+	// websocket. Empty means no restriction; "*" allows any. Requests without an
+	// Origin header (non-browser clients) are always allowed.
+	AllowedOrigins []string
+}
+
+// originAllowed reports whether a websocket upgrade from the given Origin header
+// is permitted.
+func (c *Config) originAllowed(origin string) bool {
+	if origin == EMPTY_STR || len(c.AllowedOrigins) == 0 {
+		return true
+	}
+	for _, a := range c.AllowedOrigins {
+		if a == "*" || a == origin {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *Config) tlsEnabled() bool { return c.TLSCert != EMPTY_STR && c.TLSKey != EMPTY_STR }

@@ -233,6 +233,22 @@ func TestWebsocketOverTLS(t *testing.T) {
 	}
 }
 
+// A websocket upgrade from a disallowed Origin is rejected with 403.
+func TestWebsocketOriginRejected(t *testing.T) {
+	app := newTestAppCfg(t, func(c *Config) {
+		c.AllowedOrigins = []string{"https://good.example"}
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/ws", nil)
+	req.Header.Set("Origin", "https://evil.example")
+	w := httptest.NewRecorder()
+	app.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("want %d, got %d", http.StatusForbidden, w.Code)
+	}
+}
+
 // The server proactively pings idle connections for keepalive.
 func TestWebsocketServerSendsPing(t *testing.T) {
 	app := newTestAppCfg(t, func(c *Config) { c.PingInterval = 30 * time.Millisecond })

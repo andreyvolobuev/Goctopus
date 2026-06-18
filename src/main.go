@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -19,6 +20,17 @@ func envOr(name, def string) string {
 		return v
 	}
 	return def
+}
+
+// splitCSV splits a comma-separated list, trimming spaces and dropping empties.
+func splitCSV(s string) []string {
+	var out []string
+	for _, p := range strings.Split(s, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func main() {
@@ -41,6 +53,7 @@ func main() {
 		redisURL         = flag.String("redis-url", envOr(WS_REDIS_URL, "redis://localhost:6379/0"), "Redis connection URL when --storage=redis")
 		tlsCert          = flag.String("tls-cert", os.Getenv(WS_TLS_CERT), "Path to TLS certificate file. Set with --tls-key to serve over TLS (wss://)")
 		tlsKey           = flag.String("tls-key", os.Getenv(WS_TLS_KEY), "Path to TLS private key file")
+		allowedOrigins   = flag.String("allowed-origins", os.Getenv(WS_ALLOWED_ORIGINS), "Comma-separated whitelist of browser Origins allowed to open websockets (empty = any, '*' = any)")
 	)
 	flag.Parse()
 
@@ -72,6 +85,7 @@ func main() {
 		ReadTimeout:      parseDurationOr(*readTimeout, 70*time.Second),
 		TLSCert:          *tlsCert,
 		TLSKey:           *tlsKey,
+		AllowedOrigins:   splitCSV(*allowedOrigins),
 	}
 
 	app := Goctopus{}

@@ -4,6 +4,7 @@ package main
 const (
 	ERR_TEMPLATE             = "%s"
 	AUTH_FAILED              = "Authentication failed: %s"
+	ORIGIN_REJECTED          = "rejected websocket upgrade from disallowed origin: %s"
 	POST_NEW_MSG             = "[POST] New message!"
 	NO_CREDS_FOR_POST        = "Credentials for POST-request not provided!"
 	BAD_CREDS_FOR_POST       = "POST-request with bad credentials"
@@ -84,6 +85,7 @@ const (
 	WS_REDIS_URL        = "WS_REDIS_URL"
 	WS_TLS_CERT         = "WS_TLS_CERT"
 	WS_TLS_KEY          = "WS_TLS_KEY"
+	WS_ALLOWED_ORIGINS  = "WS_ALLOWED_ORIGINS"
 
 	// query parameters
 	KEY = "key"
@@ -100,4 +102,5 @@ const (
 	// headers
 	CONTENT_TYPE     = "Content-Type"
 	APPLICATION_JSON = "application/json"
+	ORIGIN           = "Origin"
 )
