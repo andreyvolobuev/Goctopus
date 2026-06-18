@@ -19,6 +19,23 @@ func TestHealthzReturnsOK(t *testing.T) {
 	}
 }
 
+func TestVersionEndpoint(t *testing.T) {
+	app := newTestApp(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/version", nil)
+	w := httptest.NewRecorder()
+	app.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want %d, got %d", http.StatusOK, w.Code)
+	}
+	for _, want := range []string{"version", "commit", "go"} {
+		if !strings.Contains(w.Body.String(), want) {
+			t.Fatalf("version output missing %q: %s", want, w.Body.String())
+		}
+	}
+}
+
 func TestMetricsExposesCounters(t *testing.T) {
 	app := newTestApp(t)
 

@@ -50,6 +50,15 @@ func newMetrics(g *Goctopus) *metrics {
 	}
 
 	reg.MustRegister(m.received, m.delivered, m.expired, m.authFail, m.delivery)
+
+	buildInfo := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name:        "goctopus_build_info",
+		Help:        "Build information; always 1, labelled with version and commit.",
+		ConstLabels: prometheus.Labels{"version": version, "commit": commit},
+	})
+	buildInfo.Set(1)
+	reg.MustRegister(buildInfo)
+
 	reg.MustRegister(collectors.NewGoCollector())
 	reg.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 

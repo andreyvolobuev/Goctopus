@@ -26,6 +26,9 @@ func (g *Goctopus) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case METRICS:
 		g.handleMetrics(w, r)
 
+	case VERSION:
+		g.handleVersion(w, r)
+
 	default:
 		http.NotFound(w, r)
 	}

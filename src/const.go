@@ -107,6 +107,7 @@ const (
 	HEALTHZ = "/healthz"
 	READYZ  = "/readyz"
 	METRICS = "/metrics"
+	VERSION = "/version"
 
 	// headers
 	CONTENT_TYPE     = "Content-Type"
