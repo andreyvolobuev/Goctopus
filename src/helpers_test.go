@@ -20,6 +20,7 @@ func testConfig(key string) *Config {
 		SweepInterval:    time.Minute,
 		PingInterval:     time.Hour,
 		ReadTimeout:      30 * time.Second,
+		WriteTimeout:     10 * time.Second,
 		AuthTimeout:      10 * time.Second,
 		MaxMessageBytes:  1 << 20,
 	}

@@ -31,6 +31,7 @@ type Config struct {
 	SweepInterval time.Duration
 	PingInterval  time.Duration
 	ReadTimeout   time.Duration
+	WriteTimeout  time.Duration
 
 	// MaxMessageBytes bounds a single POST body and a single inbound websocket
 	// message, protecting against memory-exhaustion DoS.

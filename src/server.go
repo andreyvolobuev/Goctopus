@@ -76,7 +76,7 @@ func (g *Goctopus) handleWs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	c := newClient(conn, keys)
+	c := newClient(conn, keys, g.config.WriteTimeout)
 
 	g.mu.Lock()
 	for _, key := range keys {

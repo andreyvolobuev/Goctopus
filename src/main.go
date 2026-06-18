@@ -50,6 +50,7 @@ func main() {
 		sweepInterval    = flag.String("sweep-interval", envOr(WS_SWEEP_INTERVAL, "1m"), "How often expired messages are swept from storage")
 		pingInterval     = flag.String("ping-interval", envOr(WS_PING_INTERVAL, "30s"), "How often to ping idle websocket connections (keepalive)")
 		readTimeout      = flag.String("read-timeout", envOr(WS_READ_TIMEOUT, "70s"), "Drop a websocket connection if no frame (incl. pong) arrives within this time")
+		writeTimeout     = flag.String("write-timeout", envOr(WS_WRITE_TIMEOUT, "10s"), "Bound each websocket write so a slow client can't pin a worker")
 		redisURL         = flag.String("redis-url", envOr(WS_REDIS_URL, "redis://localhost:6379/0"), "Redis connection URL when --storage=redis")
 		tlsCert          = flag.String("tls-cert", os.Getenv(WS_TLS_CERT), "Path to TLS certificate file. Set with --tls-key to serve over TLS (wss://)")
 		tlsKey           = flag.String("tls-key", os.Getenv(WS_TLS_KEY), "Path to TLS private key file")
@@ -89,6 +90,7 @@ func main() {
 		SweepInterval:    parseDurationOr(*sweepInterval, time.Minute),
 		PingInterval:     parseDurationOr(*pingInterval, 30*time.Second),
 		ReadTimeout:      parseDurationOr(*readTimeout, 70*time.Second),
+		WriteTimeout:     parseDurationOr(*writeTimeout, 10*time.Second),
 		TLSCert:          *tlsCert,
 		TLSKey:           *tlsKey,
 		AllowedOrigins:   splitCSV(*allowedOrigins),

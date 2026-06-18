@@ -17,8 +17,9 @@ import (
 // inflight set lets sendMessages avoid re-pushing a message that has already
 // been written to this connection and is still awaiting its ACK.
 type client struct {
-	conn net.Conn
-	keys []string
+	conn         net.Conn
+	keys         []string
+	writeTimeout time.Duration
 
 	wmu sync.Mutex // serializes frame writes
 
@@ -27,29 +28,41 @@ type client struct {
 	closed   bool
 }
 
-func newClient(conn net.Conn, keys []string) *client {
+func newClient(conn net.Conn, keys []string, writeTimeout time.Duration) *client {
 	return &client{
-		conn:     conn,
-		keys:     keys,
-		inflight: make(map[uuid.UUID]bool),
+		conn:         conn,
+		keys:         keys,
+		writeTimeout: writeTimeout,
+		inflight:     make(map[uuid.UUID]bool),
+	}
+}
+
+// setWriteDeadline bounds a write so a stuck/slow client can't pin the per-key
+// send lock or a worker indefinitely.
+func (c *client) setWriteDeadline() {
+	if c.writeTimeout > 0 {
+		c.conn.SetWriteDeadline(time.Now().Add(c.writeTimeout))
 	}
 }
 
 func (c *client) writeMessage(data []byte) error {
 	c.wmu.Lock()
 	defer c.wmu.Unlock()
+	c.setWriteDeadline()
 	return wsutil.WriteServerMessage(c.conn, ws.OpText, data)
 }
 
 func (c *client) writePing() error {
 	c.wmu.Lock()
 	defer c.wmu.Unlock()
+	c.setWriteDeadline()
 	return ws.WriteFrame(c.conn, ws.NewPingFrame(nil))
 }
 
 func (c *client) writePong(payload []byte) error {
 	c.wmu.Lock()
 	defer c.wmu.Unlock()
+	c.setWriteDeadline()
 	return ws.WriteFrame(c.conn, ws.NewPongFrame(payload))
 }
 
