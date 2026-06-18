@@ -4,33 +4,59 @@ package main
 // It stores all the messages in memory.
 // Upsides: fast
 // Downsides: not persistant
+//
+// MemoryStorage is internally synchronized (like the Redis backend) so the
+// engine never needs to hold its global mutex around storage access.
 
-import "github.com/google/uuid"
+import (
+	"sync"
+
+	"github.com/google/uuid"
+)
 
 type MemoryStorage struct {
+	mu      sync.Mutex
 	storage map[string][]Message
 }
 
 func (s *MemoryStorage) Init(cfg *Config) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.storage = make(map[string][]Message)
 	return nil
 }
 
 func (s *MemoryStorage) SetQueue(key string, queue []Message) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.storage[key] = queue
 	return nil
 }
 
 func (s *MemoryStorage) GetQueue(key string) ([]Message, error) {
-	return s.storage[key], nil
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	// Return a copy so the caller can use it after the lock is released without
+	// racing a concurrent AddMessage that appends to the same backing array.
+	src := s.storage[key]
+	if len(src) == 0 {
+		return nil, nil
+	}
+	out := make([]Message, len(src))
+	copy(out, src)
+	return out, nil
 }
 
 func (s *MemoryStorage) DeleteQueue(key string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	delete(s.storage, key)
 	return nil
 }
 
 func (s *MemoryStorage) AddMessage(key string, m Message) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	// Upsert by id so re-publishing with the same (caller-supplied) id is
 	// idempotent, matching the Redis HSET behaviour.
 	queue := s.storage[key]
@@ -46,6 +72,8 @@ func (s *MemoryStorage) AddMessage(key string, m Message) error {
 }
 
 func (s *MemoryStorage) DeleteMessage(key string, id uuid.UUID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	queue := s.storage[key]
 	for i, m := range queue {
 		if m.id == id {
@@ -62,11 +90,11 @@ func (s *MemoryStorage) DeleteMessage(key string, id uuid.UUID) error {
 }
 
 func (s *MemoryStorage) GetKeys() ([]string, error) {
-	keys := make([]string, len(s.storage))
-	i := 0
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	keys := make([]string, 0, len(s.storage))
 	for k := range s.storage {
-		keys[i] = k
-		i++
+		keys = append(keys, k)
 	}
 	return keys, nil
 }

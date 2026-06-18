@@ -111,10 +111,7 @@ func (g *Goctopus) handleWs(w http.ResponseWriter, r *http.Request) {
 		for _, key := range keys {
 			if hasWildcard(key) {
 				// Flush the backlog of every concrete key this pattern covers.
-				g.mu.Lock()
-				matched := g.storageKeysMatching(key)
-				g.mu.Unlock()
-				for _, k := range matched {
+				for _, k := range g.storageKeysMatching(key) {
 					g.sendMessages(k)
 				}
 			} else {
@@ -227,9 +224,7 @@ func (g *Goctopus) handleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	g.mu.Lock()
-	defer g.mu.Unlock()
-
+	// Storage reads are self-synchronized; no g.mu needed.
 	var data []byte
 	if key == EMPTY_STR {
 		g.Log(GET_ALL_MSGS)
@@ -310,7 +305,6 @@ func (g *Goctopus) handleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate the id before taking the lock so a bad request never holds it.
 	var id uuid.UUID
 	if id_ != EMPTY_STR {
 		parsed, err := uuid.Parse(id_)
@@ -322,9 +316,7 @@ func (g *Goctopus) handleDelete(w http.ResponseWriter, r *http.Request) {
 		id = parsed
 	}
 
-	g.mu.Lock()
-	defer g.mu.Unlock()
-
+	// Storage is self-synchronized; no g.mu needed.
 	switch {
 	case key == EMPTY_STR:
 		keys, err := g.storage.GetKeys()
@@ -342,8 +334,7 @@ func (g *Goctopus) handleDelete(w http.ResponseWriter, r *http.Request) {
 		g.Log(ALL_DELETED_FROM_KEY, key)
 
 	default:
-		// Caller holds g.mu, so use the *Locked variant to avoid a deadlock.
-		if err := g.deleteMsgByIdLocked(key, id); err != nil {
+		if err := g.deleteMsgById(key, id); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}

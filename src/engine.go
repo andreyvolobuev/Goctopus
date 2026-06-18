@@ -126,18 +126,28 @@ func (g *Goctopus) reconcileLoop() {
 		case <-ticker.C:
 		}
 
+		// Snapshot the local connection keys under g.mu, then resolve wildcard
+		// patterns against storage without holding it.
 		g.mu.Lock()
-		keySet := make(map[string]bool)
+		var concrete, patterns []string
 		for k := range g.Conns {
 			if hasWildcard(k) {
-				for _, sk := range g.storageKeysMatching(k) {
-					keySet[sk] = true
-				}
+				patterns = append(patterns, k)
 			} else {
-				keySet[k] = true
+				concrete = append(concrete, k)
 			}
 		}
 		g.mu.Unlock()
+
+		keySet := make(map[string]bool)
+		for _, k := range concrete {
+			keySet[k] = true
+		}
+		for _, p := range patterns {
+			for _, sk := range g.storageKeysMatching(p) {
+				keySet[sk] = true
+			}
+		}
 
 		for k := range keySet {
 			g.sendMessages(k)
@@ -244,15 +254,19 @@ func (g *Goctopus) sendMessages(key string) {
 	sl.Lock()
 	defer sl.Unlock()
 
+	// Snapshot the connection registry under g.mu, then read the queue from the
+	// (self-synchronized) storage without holding g.mu, so storage latency never
+	// blocks the registry.
 	g.mu.Lock()
 	clients := g.clientsForKey(key)
-	msgQueue, err := g.getMsgQueue(key)
 	g.mu.Unlock()
 
 	if len(clients) == 0 {
 		g.Log(NO_CONNS, key)
 		return
 	}
+
+	msgQueue, err := g.getMsgQueue(key)
 	if err != nil {
 		g.Log(ERR_GET_MSGS, key)
 		return
@@ -316,7 +330,8 @@ func (g *Goctopus) clientsForKey(key string) []*client {
 
 // storageKeysMatching returns the concrete storage keys that a wildcard
 // subscription pattern covers, so a freshly-connected pattern subscriber can be
-// sent the existing backlog. The caller must hold g.mu.
+// sent the existing backlog. It only touches the (self-synchronized) storage,
+// so it must NOT be called while holding g.mu.
 func (g *Goctopus) storageKeysMatching(pattern string) []string {
 	keys, err := g.storage.GetKeys()
 	if err != nil {
@@ -333,13 +348,10 @@ func (g *Goctopus) storageKeysMatching(pattern string) []string {
 }
 
 func (g *Goctopus) queueMessage(m Message) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-
-	err := g.storage.AddMessage(m.Key, m)
-	if err != nil {
+	// Storage is self-synchronized; do not hold g.mu (which guards the
+	// connection registry) across a possibly-remote storage call.
+	if err := g.storage.AddMessage(m.Key, m); err != nil {
 		g.Log(ERR_TEMPLATE, err)
-		return
 	}
 }
 
@@ -426,16 +438,9 @@ func (g *Goctopus) getMarshalledMessages(key string) ([]byte, error) {
 	return queue, err
 }
 
+// deleteMsgById removes a message by id. Storage is self-synchronized, so this
+// does not take g.mu.
 func (g *Goctopus) deleteMsgById(key string, id uuid.UUID) error {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	return g.deleteMsgByIdLocked(key, id)
-}
-
-// deleteMsgByIdLocked removes a message by id. The caller MUST already hold
-// g.mu. sync.Mutex is not reentrant, so calling deleteMsgById (which locks)
-// while already holding g.mu would deadlock.
-func (g *Goctopus) deleteMsgByIdLocked(key string, id uuid.UUID) error {
 	if err := g.storage.DeleteMessage(key, id); err != nil {
 		g.Log(ERR_TEMPLATE, err)
 		return err
@@ -456,12 +461,8 @@ func (g *Goctopus) sweepExpired() {
 		case <-ticker.C:
 		}
 
-		// Snapshot the key set under a brief lock, then process each key with
-		// its own short lock so the sweep never holds the global mutex for the
-		// whole pass (which would stall the server under many keys).
-		g.mu.Lock()
+		// Storage is self-synchronized; the sweep never touches g.mu.
 		keys, err := g.storage.GetKeys()
-		g.mu.Unlock()
 		if err != nil {
 			continue
 		}
@@ -472,32 +473,23 @@ func (g *Goctopus) sweepExpired() {
 	}
 }
 
-// sweepKey removes expired messages from a single key, holding the lock only
-// for that key.
+// sweepKey removes expired messages from a single key. Each expired message is
+// deleted individually by id (an atomic storage op), so a message added
+// concurrently is never clobbered, and no global lock is held.
 func (g *Goctopus) sweepKey(key string) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-
 	queue, err := g.getMsgQueue(key)
 	if err != nil {
 		return
 	}
-	kept := make([]Message, 0, len(queue))
 	removed := 0
 	for _, m := range queue {
 		if m.isExpired() {
+			g.deleteMsgById(key, m.id)
 			removed++
-			continue
 		}
-		kept = append(kept, m)
 	}
 	if removed == 0 {
 		return
-	}
-	if len(kept) == 0 {
-		g.deleteMsgQueue(key)
-	} else {
-		g.updateMsgQueue(key, kept)
 	}
 	g.metrics.expired.Add(float64(removed))
 	g.Log(SWEEP_EXPIRED, removed, key)

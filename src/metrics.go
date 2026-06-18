@@ -76,8 +76,8 @@ func newMetrics(g *Goctopus) *metrics {
 	reg.MustRegister(prometheus.NewGaugeFunc(prometheus.GaugeOpts{
 		Name: "goctopus_keys", Help: "Current number of keys with queued messages.",
 	}, func() float64 {
-		g.mu.Lock()
-		defer g.mu.Unlock()
+		// Storage is self-synchronized; don't hold g.mu across a (possibly
+		// remote) GetKeys during a scrape.
 		k, err := g.storage.GetKeys()
 		if err != nil {
 			return 0

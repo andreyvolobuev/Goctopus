@@ -147,6 +147,9 @@ func (g *Goctopus) readLoop(c *client) {
 			if err != nil {
 				return
 			}
+			if int64(len(payload)) > g.config.MaxMessageBytes {
+				return // decompression bomb, drop the connection
+			}
 		}
 
 		switch hdr.OpCode {
@@ -187,11 +190,10 @@ func (g *Goctopus) handleAck(c *client, payload []byte) {
 
 	c.clearInflight(id)
 
-	g.mu.Lock()
+	// Storage is self-synchronized; no need to hold g.mu around these deletes.
 	for _, key := range c.keys {
-		g.deleteMsgByIdLocked(key, id)
+		g.deleteMsgById(key, id)
 	}
-	g.mu.Unlock()
 
 	g.metrics.delivered.Add(1)
 }
