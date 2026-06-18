@@ -16,6 +16,7 @@ type Config struct {
 	Workers       int
 	DefaultExpire string // fallback message TTL when a message omits "expire"
 	Verbose       bool
+	LogJSON       bool // emit structured logs as JSON instead of text
 
 	Login          string
 	Password       string

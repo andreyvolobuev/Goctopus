@@ -69,6 +69,7 @@ const (
 	// environments variable names
 	WS_WORKERS    = "WS_WORKERS"
 	WS_VERBOSE    = "WS_VERBOSE"
+	WS_LOG_FORMAT = "WS_LOG_FORMAT"
 	WS_HOST       = "WS_HOST"
 	WS_PORT       = "WS_PORT"
 	WS_MSG_EXPIRE = "WS_MSG_EXPIRE"

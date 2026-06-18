@@ -43,6 +43,7 @@ func main() {
 		password         = flag.String("password", os.Getenv(WS_PASSWORD), "Password to authorize sending websocket messages")
 		authURL          = flag.String("auth", os.Getenv(WS_AUTH_URL), "URL to forward websocket requests to in order to obtain user's identifier")
 		verbose          = flag.String("verbose", envOr(WS_VERBOSE, "false"), "Whether or not to log everything to console")
+		logFormat        = flag.String("log-format", envOr(WS_LOG_FORMAT, "text"), "Structured log format: text or json")
 		storageEngine    = flag.String("storage", envOr(WS_STORAGE, DEFAULT), "Storage engine used to keep message queues (memory/redis)")
 		authorizerEngine = flag.String("authorizer", envOr(WS_AUTHORIZER, DEFAULT), "Authorizer engine used to authorize incoming requests (proxy/dummy)")
 		insecureNoAuth   = flag.String("insecure-no-auth", envOr(WS_INSECURE_NO_AUTH, "false"), "Allow unauthenticated POST requests (DEVELOPMENT ONLY)")
@@ -87,6 +88,7 @@ func main() {
 		Workers:           nWorkers,
 		DefaultExpire:     *expire,
 		Verbose:           parseBool(*verbose),
+		LogJSON:           *logFormat == "json",
 		Login:             *login,
 		Password:          *password,
 		InsecureNoAuth:    parseBool(*insecureNoAuth),

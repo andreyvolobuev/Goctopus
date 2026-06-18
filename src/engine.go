@@ -6,7 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
-	"log"
+	"log/slog"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -39,6 +40,7 @@ type Goctopus struct {
 
 	config  *Config
 	limiter *rateLimiter
+	logger  *slog.Logger
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -49,6 +51,20 @@ type Goctopus struct {
 func (g *Goctopus) Start(cfg *Config) {
 	g.config = cfg
 	g.ctx, g.cancel = context.WithCancel(context.Background())
+
+	// Structured logging. Verbose lowers the level to Debug (where g.Log emits);
+	// otherwise Debug lines are filtered and only Info+ lifecycle events show.
+	level := slog.LevelInfo
+	if cfg.Verbose {
+		level = slog.LevelDebug
+	}
+	opts := &slog.HandlerOptions{Level: level}
+	var h slog.Handler = slog.NewTextHandler(os.Stderr, opts)
+	if cfg.LogJSON {
+		h = slog.NewJSONHandler(os.Stderr, opts)
+	}
+	g.logger = slog.New(h)
+
 	g.Log(START_APP)
 
 	g.storage = g.getStorage()
@@ -320,10 +336,17 @@ func (g *Goctopus) queueMessage(m Message) {
 	}
 }
 
+// Log emits a debug-level message through the structured logger. Debug lines
+// are only rendered when verbose logging lowers the level (see Start).
 func (g *Goctopus) Log(format string, v ...any) {
-	if g.config != nil && g.config.Verbose {
-		log.Printf(format+"\n", v...)
+	if g.logger == nil {
+		return
 	}
+	if len(v) == 0 {
+		g.logger.Debug(format)
+		return
+	}
+	g.logger.Debug(fmt.Sprintf(format, v...))
 }
 
 func (g *Goctopus) getStorage() Storage {
