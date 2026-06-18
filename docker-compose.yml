@@ -35,10 +35,15 @@ services:
       WS_AUTH_URL: demo-user
       WS_STORAGE: redis
       WS_REDIS_URL: redis://redis:6379/0
+      WS_REDIS_KEY_TTL: 24h
       WS_SWEEP_INTERVAL: 1m
+      # Safety net for missed Redis pub/sub events across instances.
+      WS_RECONCILE_INTERVAL: 15s
       WS_AUTH_TIMEOUT: 10s
       WS_PING_INTERVAL: 30s
       WS_READ_TIMEOUT: 70s
+      WS_WRITE_TIMEOUT: 10s
+      WS_LOG_FORMAT: json
       WS_VERBOSE: "1"
     depends_on:
       redis:

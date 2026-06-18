@@ -88,6 +88,18 @@ docker run \
 - WS_READ_TIMEOUT (flag --read-timeout): drop a connection if no frame (including a pong) arrives within this time (default `70s`)
 - WS_INSECURE_NO_AUTH (flag --insecure-no-auth): allow unauthenticated POST requests. **DEVELOPMENT ONLY** — see Security below
 - WS_TLS_CERT / WS_TLS_KEY (flags --tls-cert / --tls-key): paths to a TLS certificate and private key. When both are set Goctopus serves over TLS, so the websocket endpoint is available as `wss://`
+- WS_WRITE_TIMEOUT (flag --write-timeout): bound each websocket write so a slow client can't pin a worker (default `10s`)
+- WS_RECONCILE_INTERVAL (flag --reconcile-interval): periodically re-flush local keys as a safety net for multi-instance Redis pub/sub; `0` disables (default `0`)
+- WS_MAX_MESSAGE_SIZE (flag --max-message-size): max bytes of a POST body / inbound websocket message (default `1048576`)
+- WS_COMPRESS (flag --compress): enable permessage-deflate compression for websocket connections (default `false`)
+- WS_RATE_LIMIT / WS_RATE_BURST (flags --rate-limit / --rate-burst): per-client-IP request rate (events/sec) and burst for the API and ws upgrades; `0` disables (default off)
+- WS_ALLOWED_ORIGINS (flag --allowed-origins): comma-separated whitelist of browser Origins allowed to open websockets (empty = any, `*` = any)
+- WS_AUTH_CACHE_TTL (flag --auth-cache-ttl): cache proxy-auth results per credential for this duration to avoid a backend round-trip on every connect; `0` disables (default `0`)
+- WS_REDIS_KEY_TTL (flag --redis-key-ttl): Redis EXPIRE backstop on each queue key; `0` disables (default `24h`)
+- WS_HISTORY_SIZE / WS_HISTORY_TTL (flags --history-size / --history-ttl): per-key count and max age of recent messages kept for the history endpoint; size `0` disables (default off)
+- WS_LOG_FORMAT (flag --log-format): structured log format, `text` or `json` (default `text`)
+- WS_CONFIG (flag --config): path to a YAML config file whose keys are flag names; explicit flags override it
+- (flag --healthcheck): probe `/healthz` on the configured port and exit 0/1; used by the container HEALTHCHECK
 
 
 ### Security
@@ -102,10 +114,15 @@ docker run \
 
 - `GET /healthz` — liveness probe, always `200 ok` while the process is up
 - `GET /readyz` — readiness probe, `200` once storage and authorizer are initialized
-- `GET /metrics` — Prometheus text exposition format with counters
+- `GET /metrics` — Prometheus exposition: counters
   (`goctopus_messages_received_total`, `goctopus_messages_delivered_total`,
-  `goctopus_messages_expired_total`, `goctopus_auth_failures_total`) and gauges
-  (`goctopus_connections`, `goctopus_keys`)
+  `goctopus_messages_expired_total`, `goctopus_auth_failures_total`), a
+  `goctopus_delivery_seconds` histogram, gauges (`goctopus_connections`,
+  `goctopus_keys`), `goctopus_build_info`, plus Go runtime/process collectors
+- `GET /version` — build metadata `{version, commit, go}`
+
+These endpoints are not authenticated or rate-limited (intended for an internal
+network / orchestrator probes).
 
 
 ### Use
@@ -140,9 +157,11 @@ connect();
 - backend forms a message to be sent and sends it to Goctopus via POST-requests with Basic Authentication ([RFC 2617, Section 2](https://www.rfc-editor.org/rfc/rfc2617.html#section-2))
 
 Message structure should be as follows:
-- key (REQUIRED): a user identifier, if many users are identified by same key, then message will be sent to all of them. The key itself by which the user was identified will not be sent to user
+- key (REQUIRED*): a user identifier, if many users are identified by same key, then message will be sent to all of them. The key itself by which the user was identified will not be sent to user
+- keys (OPTIONAL): an array of keys to fan the message out to several keys at once (use instead of or together with `key`; at least one of `key`/`keys` is required)
 - value (REQUIRED): the message that will be sent out to the end user
 - expire (OPTIONAL): if the message was sent out but there was no receiver with the required key connected, then Goctopus will wait for this amout of time before the message will be considered expired and will be removed from send queue. If this parameter is ommited then default value (set by WS_MSG_EXPIRE env variable or --expire flag) will be used
+- message_id (OPTIONAL): a caller-supplied uuid that makes the publish idempotent — re-posting with the same `message_id` upserts instead of creating a duplicate (handy for backend retries)
 
 with curl:
 ```
@@ -165,11 +184,15 @@ r = requests.post("http://goctopus:7890", data=json.dumps(message), auth=("admin
 
 ### API
 
-Goctopus server supports the following HTTP API:
+Goctopus server supports the following HTTP API (all of it requires Basic Auth — see Security):
 * `GET ` Returns list of keys currently stored
 * `GET ?key=<key>` Returns all messages stored for a provided key
-* `POST ?key=<key>&value=<value>&expire=<expire:optional>` Saves a message (value) for a given username (key)
+* `GET ?presence` Returns the keys that currently have at least one live connection and their connection counts
+* `GET ?key=<key>&history` Returns recently published messages retained for a key (requires `--history-size > 0`)
+* `POST` (JSON body, see "Use") Saves/forwards a message
 * `DELETE ?key=<key:optional>&id=<id:optional>` Deletes messages. If key is set but message id is not, then all messages for given key will be deleted. If both key and message id are set then only message with given key will be deleted. If key and message id are not set then all messages for all keys will be deleted.
+
+The websocket endpoint is `GET /ws` (also `/`).
 
 
 ### How it compares
