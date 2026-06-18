@@ -65,6 +65,10 @@ type Config struct {
 	TLSCert string
 	TLSKey  string
 
+	// Compression enables permessage-deflate negotiation for websocket
+	// connections (RFC 7692, no context takeover).
+	Compression bool
+
 	// AllowedOrigins is the whitelist of browser Origins permitted to open a
 	// websocket. Empty means no restriction; "*" allows any. Requests without an
 	// Origin header (non-browser clients) are always allowed.

@@ -12,7 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gobwas/httphead"
 	"github.com/gobwas/ws"
+	"github.com/gobwas/ws/wsflate"
 	"github.com/gobwas/ws/wsutil"
 	"github.com/google/uuid"
 )
@@ -254,6 +256,47 @@ func TestReconcileDeliversMissedMessages(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "recon") {
 		t.Fatalf("reconcile did not deliver the message: %s", data)
+	}
+}
+
+// With compression enabled and negotiated, the server sends permessage-deflate
+// frames that the client decompresses to the original payload.
+func TestWebsocketCompression(t *testing.T) {
+	app := newTestAppCfg(t, func(c *Config) { withCreds(c); c.Compression = true })
+	ts := httptest.NewServer(app)
+	defer ts.Close()
+
+	d := ws.Dialer{Extensions: []httphead.Option{wsflate.DefaultParameters.Option()}}
+	conn, _, _, err := d.Dial(context.Background(), wsURL(ts))
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+	waitFor(t, func() bool { return connCount(app, "testkey") == 1 }, "connection registered")
+
+	body := strings.NewReader(`{"key":"testkey","value":{"hello":"world world world world world"}}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/", body)
+	req.SetBasicAuth("admin", "secret")
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	r.Body.Close()
+
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	f, err := ws.ReadFrame(conn)
+	if err != nil {
+		t.Fatalf("read frame: %v", err)
+	}
+	if strings.Contains(string(f.Payload), "world") {
+		t.Fatal("frame payload is not compressed")
+	}
+	df, err := wsflate.DecompressFrame(f)
+	if err != nil {
+		t.Fatalf("decompress: %v", err)
+	}
+	if !strings.Contains(string(df.Payload), "world") {
+		t.Fatalf("decompressed payload missing content: %s", df.Payload)
 	}
 }
 

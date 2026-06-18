@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"compress/flate"
 	"encoding/json"
 	"io"
 	"net"
@@ -8,9 +10,14 @@ import (
 	"time"
 
 	"github.com/gobwas/ws"
+	"github.com/gobwas/ws/wsflate"
 	"github.com/gobwas/ws/wsutil"
 	"github.com/google/uuid"
 )
+
+// deflateTail is the empty-block marker appended when decompressing a
+// permessage-deflate message under no-context-takeover (RFC 7692).
+var deflateTail = []byte{0x00, 0x00, 0xff, 0xff}
 
 // client wraps a single websocket connection. All frame writes go through wmu
 // so that delivery, ping and pong frames never interleave on the wire. The
@@ -20,6 +27,7 @@ type client struct {
 	conn         net.Conn
 	keys         []string
 	writeTimeout time.Duration
+	compress     bool // permessage-deflate negotiated for this connection
 
 	wmu sync.Mutex // serializes frame writes
 
@@ -28,11 +36,12 @@ type client struct {
 	closed   bool
 }
 
-func newClient(conn net.Conn, keys []string, writeTimeout time.Duration) *client {
+func newClient(conn net.Conn, keys []string, writeTimeout time.Duration, compress bool) *client {
 	return &client{
 		conn:         conn,
 		keys:         keys,
 		writeTimeout: writeTimeout,
+		compress:     compress,
 		inflight:     make(map[uuid.UUID]bool),
 	}
 }
@@ -49,6 +58,13 @@ func (c *client) writeMessage(data []byte) error {
 	c.wmu.Lock()
 	defer c.wmu.Unlock()
 	c.setWriteDeadline()
+	if c.compress {
+		f, err := wsflate.CompressFrame(ws.NewTextFrame(data))
+		if err != nil {
+			return err
+		}
+		return ws.WriteFrame(c.conn, f)
+	}
 	return wsutil.WriteServerMessage(c.conn, ws.OpText, data)
 }
 
@@ -104,9 +120,16 @@ func (g *Goctopus) readLoop(c *client) {
 
 	rd := wsutil.NewServerSideReader(c.conn)
 	rd.MaxFrameSize = g.config.MaxMessageBytes // reject oversized single frames
+	var ms wsflate.MessageState
+	if c.compress {
+		rd.Extensions = []wsutil.RecvExtension{&ms}
+	}
 	for {
 		c.conn.SetReadDeadline(time.Now().Add(g.config.ReadTimeout))
 
+		if c.compress {
+			ms = wsflate.MessageState{}
+		}
 		hdr, err := rd.NextFrame()
 		if err != nil {
 			return
@@ -118,6 +141,12 @@ func (g *Goctopus) readLoop(c *client) {
 		}
 		if int64(len(payload)) > g.config.MaxMessageBytes {
 			return // oversized message, drop the connection
+		}
+		if c.compress && ms.IsCompressed() {
+			payload, err = inflate(payload, g.config.MaxMessageBytes)
+			if err != nil {
+				return
+			}
 		}
 
 		switch hdr.OpCode {
@@ -131,6 +160,13 @@ func (g *Goctopus) readLoop(c *client) {
 			return
 		}
 	}
+}
+
+// inflate decompresses a permessage-deflate payload (no context takeover).
+func inflate(b []byte, max int64) ([]byte, error) {
+	fr := flate.NewReader(io.MultiReader(bytes.NewReader(b), bytes.NewReader(deflateTail)))
+	defer fr.Close()
+	return io.ReadAll(io.LimitReader(fr, max+1))
 }
 
 // handleAck removes the acknowledged message from every key this connection is

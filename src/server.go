@@ -4,9 +4,11 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 
 	"github.com/gobwas/ws"
+	"github.com/gobwas/ws/wsflate"
 	"github.com/google/uuid"
 )
 
@@ -84,13 +86,13 @@ func (g *Goctopus) handleWs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conn, _, _, err := ws.UpgradeHTTP(r, w)
+	conn, compress, err := g.upgrade(w, r)
 	if err != nil {
 		g.Log(ERR_TEMPLATE, err)
 		return
 	}
 
-	c := newClient(conn, keys, g.config.WriteTimeout)
+	c := newClient(conn, keys, g.config.WriteTimeout, compress)
 
 	g.mu.Lock()
 	for _, key := range keys {
@@ -120,6 +122,23 @@ func (g *Goctopus) handleWs(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	})
+}
+
+// upgrade performs the websocket handshake, negotiating permessage-deflate when
+// enabled. It returns the connection and whether compression was accepted.
+func (g *Goctopus) upgrade(w http.ResponseWriter, r *http.Request) (net.Conn, bool, error) {
+	if !g.config.Compression {
+		conn, _, _, err := ws.UpgradeHTTP(r, w)
+		return conn, false, err
+	}
+	ext := wsflate.Extension{Parameters: wsflate.DefaultParameters}
+	u := ws.HTTPUpgrader{Negotiate: ext.Negotiate}
+	conn, _, _, err := u.Upgrade(r, w)
+	if err != nil {
+		return nil, false, err
+	}
+	_, accepted := ext.Accepted()
+	return conn, accepted, nil
 }
 
 func (g *Goctopus) handlePost(w http.ResponseWriter, r *http.Request) {
