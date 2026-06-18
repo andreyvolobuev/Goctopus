@@ -98,9 +98,20 @@ func (g *Goctopus) schedule(task func()) {
 func (g *Goctopus) worker(task func()) {
 	defer func() { <-g.sem }()
 	for {
-		task()
+		g.runTask(task)
 		task = <-g.work
 	}
+}
+
+// runTask runs a scheduled task, recovering from panics so one bad task can't
+// crash the whole process (an unrecovered panic in a goroutine is fatal in Go).
+func (g *Goctopus) runTask(task func()) {
+	defer func() {
+		if r := recover(); r != nil {
+			g.Log(PANIC_RECOVERED, r)
+		}
+	}()
+	task()
 }
 
 func (g *Goctopus) getMsgQueue(key string) ([]Message, error) {

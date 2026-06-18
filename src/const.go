@@ -41,6 +41,7 @@ const (
 	UNKNOWN_AUTHORIZER       = "unknown authorizer engine: %s"
 	AUTHORIZER_INIT_ERR      = "could not initialize authorizer %s: %s"
 	REDIS_NOTIFY_ERR         = "redis notify failed for key %s: %s"
+	PANIC_RECOVERED          = "recovered from panic in worker task: %v"
 	AUTHORIZER_INITIALIZED   = "Authorizer %s will be used"
 	LIST_KEYS_ERR            = "could not get list of keys for %s"
 	INVALID_KEY              = "invalid message key"
