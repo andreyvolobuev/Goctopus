@@ -136,6 +136,30 @@ func TestPostThenGetMessage(t *testing.T) {
 	}
 }
 
+// A POST with multiple keys fans the message out to every key.
+func TestPostMultiKeyFanout(t *testing.T) {
+	app := newTestAppCfg(t, withCreds)
+
+	body := strings.NewReader(`{"keys":["k1","k2"],"value":{"hello":"world"}}`)
+	req := httptest.NewRequest(http.MethodPost, "/", body)
+	req.SetBasicAuth("admin", "secret")
+	w := httptest.NewRecorder()
+	app.ServeHTTP(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("post: want %d, got %d", http.StatusAccepted, w.Code)
+	}
+
+	for _, k := range []string{"k1", "k2"} {
+		deadline := time.Now().Add(time.Second)
+		for time.Now().Before(deadline) && queueLen(app, k) == 0 {
+			time.Sleep(5 * time.Millisecond)
+		}
+		if queueLen(app, k) != 1 {
+			t.Fatalf("key %s: want 1 queued message, got %d", k, queueLen(app, k))
+		}
+	}
+}
+
 // A POST body larger than MaxMessageBytes is rejected instead of being read
 // into memory unbounded.
 func TestPostBodyTooLarge(t *testing.T) {

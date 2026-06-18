@@ -58,6 +58,27 @@ func TestUnmarshalRejectsInvalidExpire(t *testing.T) {
 	}
 }
 
+func TestUnmarshalMultiKeyTargets(t *testing.T) {
+	m := Message{}
+	if err := m.unmarshal(body(`{"key":"a","keys":["b","a","c"],"value":1}`), "30m"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := m.targets()
+	if len(got) != 3 {
+		t.Fatalf("targets = %v, want 3 unique (a,b,c)", got)
+	}
+}
+
+func TestUnmarshalKeysOnly(t *testing.T) {
+	m := Message{}
+	if err := m.unmarshal(body(`{"keys":["x","y"],"value":1}`), "30m"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(m.targets()) != 2 {
+		t.Fatalf("targets = %v, want 2", m.targets())
+	}
+}
+
 func TestIsExpired(t *testing.T) {
 	old := Message{Expire: "10ms", date: time.Now().Add(-time.Second)}
 	if !old.isExpired() {

@@ -11,11 +11,30 @@ import (
 
 type Message struct {
 	id     uuid.UUID
-	Key    string `json:"key"`
-	Value  any    `json:"value"`
-	Expire string `json:"expire"`
+	Key    string   `json:"key"`
+	Keys   []string `json:"keys"` // optional fan-out: deliver to several keys at once
+	Value  any      `json:"value"`
+	Expire string   `json:"expire"`
 	isSent bool
 	date   time.Time
+}
+
+// targets returns the de-duplicated set of keys this message should be
+// delivered to (the single "key" plus any "keys").
+func (m *Message) targets() []string {
+	seen := make(map[string]bool)
+	var out []string
+	add := func(k string) {
+		if k != EMPTY_STR && !seen[k] {
+			seen[k] = true
+			out = append(out, k)
+		}
+	}
+	add(m.Key)
+	for _, k := range m.Keys {
+		add(k)
+	}
+	return out
 }
 
 func (m *Message) toMap(extended bool) map[string]any {
@@ -48,7 +67,7 @@ func (m *Message) unmarshal(data io.ReadCloser, defaultExpire string) error {
 		return err
 	}
 
-	if m.Key == EMPTY_STR {
+	if len(m.targets()) == 0 {
 		return errors.New(INVALID_KEY)
 	}
 

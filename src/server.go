@@ -136,10 +136,17 @@ func (g *Goctopus) handlePost(w http.ResponseWriter, r *http.Request) {
 	g.Log(NEW_MSG_CREATED, m.toMap(true))
 	g.metrics.received.Add(1)
 
+	// Fan out to every target key (single "key" and/or "keys"). The same id is
+	// reused so a client subscribed to several of them is de-duplicated.
+	targets := m.targets()
 	g.schedule(func() {
-		g.queueMessage(m)
-		g.notify(m.Key)
-		g.sendMessages(m.Key)
+		for _, key := range targets {
+			mk := m
+			mk.Key = key
+			g.queueMessage(mk)
+			g.notify(key)
+			g.sendMessages(key)
+		}
 	})
 
 	w.WriteHeader(http.StatusAccepted)
