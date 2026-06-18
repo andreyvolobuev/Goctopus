@@ -31,7 +31,17 @@ func (s *MemoryStorage) DeleteQueue(key string) error {
 }
 
 func (s *MemoryStorage) AddMessage(key string, m Message) error {
-	s.storage[key] = append(s.storage[key], m)
+	// Upsert by id so re-publishing with the same (caller-supplied) id is
+	// idempotent, matching the Redis HSET behaviour.
+	queue := s.storage[key]
+	for i := range queue {
+		if queue[i].id == m.id {
+			queue[i] = m
+			s.storage[key] = queue
+			return nil
+		}
+	}
+	s.storage[key] = append(queue, m)
 	return nil
 }
 

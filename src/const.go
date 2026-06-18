@@ -47,6 +47,7 @@ const (
 	INVALID_KEY              = "invalid message key"
 	INVALID_VALUE            = "invalid message value"
 	INVALID_EXPIRE           = "invalid message expire duration"
+	INVALID_MESSAGE_ID       = "invalid message_id (must be a uuid)"
 	SWEEP_EXPIRED            = "swept %d expired message(s) from key: %s"
 	MESSAGE                  = "message"
 	MULTIPLE                 = "s"

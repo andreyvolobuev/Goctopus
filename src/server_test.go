@@ -136,6 +136,34 @@ func TestPostThenGetMessage(t *testing.T) {
 	}
 }
 
+// Re-posting with the same message_id is idempotent (no duplicate queued).
+func TestIdempotentPostByMessageID(t *testing.T) {
+	app := newTestAppCfg(t, withCreds)
+
+	post := func() {
+		body := strings.NewReader(`{"key":"k","value":1,"message_id":"11111111-1111-1111-1111-111111111111"}`)
+		req := httptest.NewRequest(http.MethodPost, "/", body)
+		req.SetBasicAuth("admin", "secret")
+		w := httptest.NewRecorder()
+		app.ServeHTTP(w, req)
+		if w.Code != http.StatusAccepted {
+			t.Fatalf("post: want %d, got %d", http.StatusAccepted, w.Code)
+		}
+	}
+
+	post()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) && queueLen(app, "k") == 0 {
+		time.Sleep(5 * time.Millisecond)
+	}
+	post() // same message_id again
+
+	time.Sleep(50 * time.Millisecond)
+	if n := queueLen(app, "k"); n != 1 {
+		t.Fatalf("want 1 queued message after idempotent re-post, got %d", n)
+	}
+}
+
 // History records recently published messages and serves them via GET ?history.
 func TestHistoryEndpoint(t *testing.T) {
 	app := newTestAppCfg(t, func(c *Config) {

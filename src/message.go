@@ -10,13 +10,14 @@ import (
 )
 
 type Message struct {
-	id     uuid.UUID
-	Key    string   `json:"key"`
-	Keys   []string `json:"keys"` // optional fan-out: deliver to several keys at once
-	Value  any      `json:"value"`
-	Expire string   `json:"expire"`
-	isSent bool
-	date   time.Time
+	id        uuid.UUID
+	Key       string   `json:"key"`
+	Keys      []string `json:"keys"`       // optional fan-out: deliver to several keys at once
+	MessageID string   `json:"message_id"` // optional caller-supplied id for idempotent publishes
+	Value     any      `json:"value"`
+	Expire    string   `json:"expire"`
+	isSent    bool
+	date      time.Time
 }
 
 // targets returns the de-duplicated set of keys this message should be
@@ -84,9 +85,20 @@ func (m *Message) unmarshal(data io.ReadCloser, defaultExpire string) error {
 	}
 
 	m.date = time.Now()
-	m.id, err = uuid.NewRandom()
-	if err != nil {
-		return err
+
+	// A caller-supplied message_id makes publishes idempotent: re-posting with
+	// the same id upserts instead of creating a duplicate.
+	if m.MessageID != EMPTY_STR {
+		id, err := uuid.Parse(m.MessageID)
+		if err != nil {
+			return errors.New(INVALID_MESSAGE_ID)
+		}
+		m.id = id
+	} else {
+		m.id, err = uuid.NewRandom()
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
