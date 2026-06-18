@@ -29,6 +29,7 @@ const (
 type RedisStorage struct {
 	client *redis.Client
 	ctx    context.Context
+	keyTTL time.Duration
 }
 
 func (s *RedisStorage) queueKey(key string) string { return redisQueuePfx + key }
@@ -44,6 +45,7 @@ func (s *RedisStorage) Init(cfg *Config) error {
 	}
 	s.client = redis.NewClient(opt)
 	s.ctx = context.Background()
+	s.keyTTL = cfg.RedisKeyTTL
 
 	ctx, cancel := context.WithTimeout(s.ctx, 5*time.Second)
 	defer cancel()
@@ -60,6 +62,9 @@ func (s *RedisStorage) SetQueue(key string, queue []Message) error {
 			return err
 		}
 		pipe.HSet(s.ctx, qk, m.id.String(), b)
+	}
+	if s.keyTTL > 0 && len(queue) > 0 {
+		pipe.Expire(s.ctx, qk, s.keyTTL)
 	}
 	_, err := pipe.Exec(s.ctx)
 	return err
@@ -93,7 +98,15 @@ func (s *RedisStorage) AddMessage(key string, m Message) error {
 		return err
 	}
 	// O(1) insert into the per-key hash, field = message id.
-	return s.client.HSet(s.ctx, s.queueKey(key), m.id.String(), b).Err()
+	qk := s.queueKey(key)
+	if s.keyTTL <= 0 {
+		return s.client.HSet(s.ctx, qk, m.id.String(), b).Err()
+	}
+	pipe := s.client.TxPipeline()
+	pipe.HSet(s.ctx, qk, m.id.String(), b)
+	pipe.Expire(s.ctx, qk, s.keyTTL)
+	_, err = pipe.Exec(s.ctx)
+	return err
 }
 
 // DeleteMessage removes a single message by id in O(1) (HDEL).

@@ -27,6 +27,9 @@ type Config struct {
 	AuthURL     string // also used as the single key by the dummy authorizer
 	AuthTimeout time.Duration
 	RedisURL    string
+	// RedisKeyTTL sets a Redis EXPIRE on each queue key as a backstop so
+	// abandoned keys are reclaimed even if the sweeper never runs. 0 disables.
+	RedisKeyTTL time.Duration
 
 	SweepInterval time.Duration
 	PingInterval  time.Duration

@@ -11,13 +11,19 @@ import (
 )
 
 func newRedisStorage(t *testing.T) *RedisStorage {
+	s, _ := newRedisStorageMR(t, &Config{})
+	return s
+}
+
+func newRedisStorageMR(t *testing.T, cfg *Config) (*RedisStorage, *miniredis.Miniredis) {
 	t.Helper()
 	mr := miniredis.RunT(t)
+	cfg.RedisURL = "redis://" + mr.Addr()
 	s := &RedisStorage{}
-	if err := s.Init(&Config{RedisURL: "redis://" + mr.Addr()}); err != nil {
+	if err := s.Init(cfg); err != nil {
 		t.Fatalf("init: %v", err)
 	}
-	return s
+	return s, mr
 }
 
 func TestRedisAddGetRoundTrip(t *testing.T) {
@@ -103,6 +109,21 @@ func TestRedisDeleteMessage(t *testing.T) {
 	q, _ := s.GetQueue("k")
 	if len(q) != 1 || q[0].id != keep {
 		t.Fatalf("expected only the kept message, got %d items", len(q))
+	}
+}
+
+func TestRedisKeyTTLBackstop(t *testing.T) {
+	s, mr := newRedisStorageMR(t, &Config{RedisKeyTTL: time.Minute})
+	s.AddMessage("k", Message{id: uuid.New(), Key: "k", Value: 1, Expire: "1m", date: time.Now()})
+
+	if q, _ := s.GetQueue("k"); len(q) != 1 {
+		t.Fatalf("expected 1 message before TTL, got %d", len(q))
+	}
+
+	mr.FastForward(2 * time.Minute) // expire the key
+
+	if q, _ := s.GetQueue("k"); len(q) != 0 {
+		t.Fatalf("expected key to expire via TTL backstop, got %d", len(q))
 	}
 }
 
