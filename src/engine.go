@@ -238,15 +238,6 @@ func (g *Goctopus) getMsgQueue(key string) ([]Message, error) {
 	return queue, nil
 }
 
-func (g *Goctopus) updateMsgQueue(key string, queue []Message) error {
-	err := g.storage.SetQueue(key, queue)
-	if err != nil {
-		g.Log(ERR_TEMPLATE, err)
-		return err
-	}
-	return nil
-}
-
 func (g *Goctopus) deleteMsgQueue(key string) {
 	err := g.storage.DeleteQueue(key)
 	if err != nil {
@@ -484,6 +475,9 @@ func (g *Goctopus) sweepExpired() {
 		for _, key := range keys {
 			g.sweepKey(key)
 		}
+
+		// Drop history entries/keys that have aged out, bounding its memory.
+		g.history.purge()
 	}
 }
 

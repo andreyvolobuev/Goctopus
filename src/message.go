@@ -16,7 +16,6 @@ type Message struct {
 	MessageID string   `json:"message_id"` // optional caller-supplied id for idempotent publishes
 	Value     any      `json:"value"`
 	Expire    string   `json:"expire"`
-	isSent    bool
 	date      time.Time
 }
 

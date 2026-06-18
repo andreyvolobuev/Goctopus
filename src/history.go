@@ -67,6 +67,25 @@ func (h *historyStore) get(key string) []Message {
 	return out
 }
 
+// purge prunes expired items from every key and drops keys left empty, bounding
+// the map for keys that received history once and then went quiet.
+func (h *historyStore) purge() {
+	if h == nil || h.size <= 0 || h.ttl <= 0 {
+		return
+	}
+	now := h.clock()
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for k, items := range h.byKey {
+		kept := h.prune(items, now)
+		if len(kept) == 0 {
+			delete(h.byKey, k)
+		} else {
+			h.byKey[k] = kept
+		}
+	}
+}
+
 // prune drops entries older than the TTL. Caller holds the lock.
 func (h *historyStore) prune(items []histItem, now time.Time) []histItem {
 	if h.ttl <= 0 {
