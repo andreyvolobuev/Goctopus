@@ -76,10 +76,13 @@ func (s *RedisStorage) GetQueue(key string) ([]Message, error) {
 		return nil, err
 	}
 	queue := make([]Message, 0, len(vals))
-	for _, v := range vals {
+	for field, v := range vals {
 		m, err := decodeMessage([]byte(v))
 		if err != nil {
-			return nil, err
+			// Skip (and drop) an undecodable entry rather than failing the whole
+			// key — one poison message must not block delivery/sweep forever.
+			s.client.HDel(s.ctx, s.queueKey(key), field)
+			continue
 		}
 		queue = append(queue, m)
 	}

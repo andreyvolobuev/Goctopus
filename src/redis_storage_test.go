@@ -127,6 +127,25 @@ func TestRedisKeyTTLBackstop(t *testing.T) {
 	}
 }
 
+func TestRedisGetQueueSkipsCorruptEntry(t *testing.T) {
+	s, mr := newRedisStorageMR(t, &Config{})
+
+	good := Message{id: uuid.New(), Key: "k", Value: 1, Expire: "1m", date: time.Now()}
+	if err := s.AddMessage("k", good); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	// Inject an undecodable field directly into the hash.
+	mr.HSet("goctopus:q:k", "corrupt", "}{not json")
+
+	q, err := s.GetQueue("k")
+	if err != nil {
+		t.Fatalf("getqueue should not fail on a corrupt entry: %v", err)
+	}
+	if len(q) != 1 || q[0].id != good.id {
+		t.Fatalf("expected only the good message, got %d", len(q))
+	}
+}
+
 func TestRedisGetKeysEmpty(t *testing.T) {
 	s := newRedisStorage(t)
 	keys, err := s.GetKeys()
