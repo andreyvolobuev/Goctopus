@@ -33,6 +33,12 @@ type Config struct {
 	ReadTimeout   time.Duration
 	WriteTimeout  time.Duration
 
+	// ReconcileInterval, when > 0, periodically re-flushes every key this
+	// instance has local connections for. It is a safety net for multi-instance
+	// Redis deployments where a pub/sub notification could be missed (Redis
+	// pub/sub is fire-and-forget). 0 disables it (fine for single instance).
+	ReconcileInterval time.Duration
+
 	// MaxMessageBytes bounds a single POST body and a single inbound websocket
 	// message, protecting against memory-exhaustion DoS.
 	MaxMessageBytes int64

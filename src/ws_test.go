@@ -14,6 +14,7 @@ import (
 
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
+	"github.com/google/uuid"
 )
 
 // wsURL turns an http test server URL into a ws:// URL pointing at /ws.
@@ -230,6 +231,29 @@ func TestWebsocketOverTLS(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "secure") {
 		t.Fatalf("did not receive message over tls: %s", data)
+	}
+}
+
+// The reconcile loop delivers messages that landed in shared storage without a
+// local notification (simulating a missed Redis pub/sub event).
+func TestReconcileDeliversMissedMessages(t *testing.T) {
+	app := newTestAppCfg(t, func(c *Config) { c.ReconcileInterval = 20 * time.Millisecond })
+	ts := httptest.NewServer(app)
+	defer ts.Close()
+
+	conn := dialWS(t, ws.Dialer{}, wsURL(ts))
+	defer conn.Close()
+	waitFor(t, func() bool { return connCount(app, "testkey") == 1 }, "connection registered")
+
+	// Put a message straight into storage, bypassing the publish path.
+	seed(app, Message{id: uuid.New(), Key: "testkey", Value: "recon", Expire: "30m", date: time.Now()})
+
+	data, _, err := wsutil.ReadServerData(conn)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if !strings.Contains(string(data), "recon") {
+		t.Fatalf("reconcile did not deliver the message: %s", data)
 	}
 }
 

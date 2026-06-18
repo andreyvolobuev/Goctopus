@@ -84,6 +84,44 @@ func (g *Goctopus) Start(cfg *Config) {
 	}
 
 	go g.sweepExpired()
+	go g.reconcileLoop()
+}
+
+// reconcileLoop periodically re-flushes every key this instance serves so that
+// messages missed by a (fire-and-forget) pub/sub notification are still
+// delivered. In-flight de-duplication prevents re-sending pending messages, so
+// this never produces duplicates for connected clients.
+func (g *Goctopus) reconcileLoop() {
+	if g.config.ReconcileInterval <= 0 {
+		return
+	}
+	ticker := time.NewTicker(g.config.ReconcileInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-g.ctx.Done():
+			return
+		case <-ticker.C:
+		}
+
+		g.mu.Lock()
+		keySet := make(map[string]bool)
+		for k := range g.Conns {
+			if hasWildcard(k) {
+				for _, sk := range g.storageKeysMatching(k) {
+					keySet[sk] = true
+				}
+			} else {
+				keySet[k] = true
+			}
+		}
+		g.mu.Unlock()
+
+		for k := range keySet {
+			g.sendMessages(k)
+		}
+	}
 }
 
 // Stop gracefully shuts the instance down: it stops background goroutines

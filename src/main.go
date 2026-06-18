@@ -51,6 +51,7 @@ func main() {
 		pingInterval     = flag.String("ping-interval", envOr(WS_PING_INTERVAL, "30s"), "How often to ping idle websocket connections (keepalive)")
 		readTimeout      = flag.String("read-timeout", envOr(WS_READ_TIMEOUT, "70s"), "Drop a websocket connection if no frame (incl. pong) arrives within this time")
 		writeTimeout     = flag.String("write-timeout", envOr(WS_WRITE_TIMEOUT, "10s"), "Bound each websocket write so a slow client can't pin a worker")
+		reconcileEvery   = flag.String("reconcile-interval", envOr(WS_RECONCILE_INTERVAL, "0"), "Periodically re-flush local keys (safety net for multi-instance Redis pub/sub); 0 disables")
 		redisURL         = flag.String("redis-url", envOr(WS_REDIS_URL, "redis://localhost:6379/0"), "Redis connection URL when --storage=redis")
 		tlsCert          = flag.String("tls-cert", os.Getenv(WS_TLS_CERT), "Path to TLS certificate file. Set with --tls-key to serve over TLS (wss://)")
 		tlsKey           = flag.String("tls-key", os.Getenv(WS_TLS_KEY), "Path to TLS private key file")
@@ -79,29 +80,30 @@ func main() {
 	rb, _ := strconv.Atoi(*rateBurst)
 
 	cfg := &Config{
-		Host:             *host,
-		Port:             *port,
-		Workers:          nWorkers,
-		DefaultExpire:    *expire,
-		Verbose:          parseBool(*verbose),
-		Login:            *login,
-		Password:         *password,
-		InsecureNoAuth:   parseBool(*insecureNoAuth),
-		StorageEngine:    *storageEngine,
-		AuthorizerEngine: *authorizerEngine,
-		AuthURL:          *authURL,
-		AuthTimeout:      parseDurationOr(*authTimeout, 10*time.Second),
-		RedisURL:         *redisURL,
-		SweepInterval:    parseDurationOr(*sweepInterval, time.Minute),
-		PingInterval:     parseDurationOr(*pingInterval, 30*time.Second),
-		ReadTimeout:      parseDurationOr(*readTimeout, 70*time.Second),
-		WriteTimeout:     parseDurationOr(*writeTimeout, 10*time.Second),
-		TLSCert:          *tlsCert,
-		TLSKey:           *tlsKey,
-		AllowedOrigins:   splitCSV(*allowedOrigins),
-		MaxMessageBytes:  maxMsg,
-		RateLimit:        rl,
-		RateBurst:        rb,
+		Host:              *host,
+		Port:              *port,
+		Workers:           nWorkers,
+		DefaultExpire:     *expire,
+		Verbose:           parseBool(*verbose),
+		Login:             *login,
+		Password:          *password,
+		InsecureNoAuth:    parseBool(*insecureNoAuth),
+		StorageEngine:     *storageEngine,
+		AuthorizerEngine:  *authorizerEngine,
+		AuthURL:           *authURL,
+		AuthTimeout:       parseDurationOr(*authTimeout, 10*time.Second),
+		RedisURL:          *redisURL,
+		SweepInterval:     parseDurationOr(*sweepInterval, time.Minute),
+		PingInterval:      parseDurationOr(*pingInterval, 30*time.Second),
+		ReadTimeout:       parseDurationOr(*readTimeout, 70*time.Second),
+		WriteTimeout:      parseDurationOr(*writeTimeout, 10*time.Second),
+		ReconcileInterval: parseDurationOr(*reconcileEvery, 0),
+		TLSCert:           *tlsCert,
+		TLSKey:            *tlsKey,
+		AllowedOrigins:    splitCSV(*allowedOrigins),
+		MaxMessageBytes:   maxMsg,
+		RateLimit:         rl,
+		RateBurst:         rb,
 	}
 
 	app := Goctopus{}
