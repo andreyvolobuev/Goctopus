@@ -362,37 +362,49 @@ func (g *Goctopus) sweepExpired() {
 	defer ticker.Stop()
 
 	for range ticker.C {
+		// Snapshot the key set under a brief lock, then process each key with
+		// its own short lock so the sweep never holds the global mutex for the
+		// whole pass (which would stall the server under many keys).
 		g.mu.Lock()
 		keys, err := g.storage.GetKeys()
+		g.mu.Unlock()
 		if err != nil {
-			g.mu.Unlock()
 			continue
 		}
+
 		for _, key := range keys {
-			queue, err := g.getMsgQueue(key)
-			if err != nil {
-				continue
-			}
-			kept := make([]Message, 0, len(queue))
-			removed := 0
-			for _, m := range queue {
-				if m.isExpired() {
-					removed++
-					continue
-				}
-				kept = append(kept, m)
-			}
-			if removed == 0 {
-				continue
-			}
-			if len(kept) == 0 {
-				g.deleteMsgQueue(key)
-			} else {
-				g.updateMsgQueue(key, kept)
-			}
-			g.metrics.expired.Add(uint64(removed))
-			g.Log(SWEEP_EXPIRED, removed, key)
+			g.sweepKey(key)
 		}
-		g.mu.Unlock()
 	}
+}
+
+// sweepKey removes expired messages from a single key, holding the lock only
+// for that key.
+func (g *Goctopus) sweepKey(key string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	queue, err := g.getMsgQueue(key)
+	if err != nil {
+		return
+	}
+	kept := make([]Message, 0, len(queue))
+	removed := 0
+	for _, m := range queue {
+		if m.isExpired() {
+			removed++
+			continue
+		}
+		kept = append(kept, m)
+	}
+	if removed == 0 {
+		return
+	}
+	if len(kept) == 0 {
+		g.deleteMsgQueue(key)
+	} else {
+		g.updateMsgQueue(key, kept)
+	}
+	g.metrics.expired.Add(uint64(removed))
+	g.Log(SWEEP_EXPIRED, removed, key)
 }
