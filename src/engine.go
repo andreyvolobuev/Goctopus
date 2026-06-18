@@ -33,7 +33,6 @@ type Goctopus struct {
 	sendLocks [sendShards]sync.Mutex
 
 	work       chan func()
-	sem        chan struct{}
 	storage    Storage
 	authorizer Authorizer
 
@@ -55,8 +54,16 @@ func (g *Goctopus) Start(cfg *Config) {
 	if cfg.Workers <= 0 {
 		panic(WS_WORKERS_NOT_FOUND)
 	}
-	g.sem = make(chan struct{}, cfg.Workers)
-	g.work = make(chan func())
+	// Fixed pool of workers draining a buffered queue. Steady-state concurrency
+	// is bounded by Workers; the queue absorbs bursts.
+	queueCap := cfg.Workers * 64
+	if queueCap < 256 {
+		queueCap = 256
+	}
+	g.work = make(chan func(), queueCap)
+	for i := 0; i < cfg.Workers; i++ {
+		go g.worker()
+	}
 
 	// If the storage backend supports cross-instance notifications (Redis),
 	// flush a key locally whenever any instance reports new messages for it.
@@ -87,19 +94,19 @@ func (g *Goctopus) sendLock(key string) *sync.Mutex {
 	return &g.sendLocks[h.Sum32()%uint32(len(g.sendLocks))]
 }
 
+// schedule enqueues a task for the worker pool. It never blocks the caller: if
+// the queue is full the task runs in its own goroutine (overflow valve).
 func (g *Goctopus) schedule(task func()) {
 	select {
 	case g.work <- task:
-	case g.sem <- struct{}{}:
-		go g.worker(task)
+	default:
+		go g.runTask(task)
 	}
 }
 
-func (g *Goctopus) worker(task func()) {
-	defer func() { <-g.sem }()
-	for {
+func (g *Goctopus) worker() {
+	for task := range g.work {
 		g.runTask(task)
-		task = <-g.work
 	}
 }
 
