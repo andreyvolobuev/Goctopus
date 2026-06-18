@@ -133,6 +133,11 @@ func (s *RedisStorage) GetKeys() ([]string, error) {
 	return keys, nil
 }
 
+// PingContext reports backend liveness for readiness checks.
+func (s *RedisStorage) PingContext(ctx context.Context) error {
+	return s.client.Ping(ctx).Err()
+}
+
 // Notify publishes that a key has new messages so other instances flush it.
 func (s *RedisStorage) Notify(key string) error {
 	return s.client.Publish(s.ctx, redisEvents, key).Err()

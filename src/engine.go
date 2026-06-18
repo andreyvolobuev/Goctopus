@@ -45,7 +45,7 @@ type Goctopus struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	metrics metrics
+	metrics *metrics
 }
 
 func (g *Goctopus) Start(cfg *Config) {
@@ -69,6 +69,7 @@ func (g *Goctopus) Start(cfg *Config) {
 
 	g.storage = g.getStorage()
 	g.authorizer = g.getAuthorizer()
+	g.metrics = newMetrics(g)
 
 	g.Conns = make(map[string][]*client)
 	g.patterns = make(map[string]bool)
@@ -277,7 +278,9 @@ func (g *Goctopus) sendMessages(key string) {
 				g.Log(CONN_ERR, err, key)
 				c.clearInflight(msg.id)
 				c.close() // readLoop's defer unregisters it
+				continue
 			}
+			g.metrics.delivery.Observe(time.Since(msg.date).Seconds())
 		}
 	}
 }
@@ -492,6 +495,6 @@ func (g *Goctopus) sweepKey(key string) {
 	} else {
 		g.updateMsgQueue(key, kept)
 	}
-	g.metrics.expired.Add(uint64(removed))
+	g.metrics.expired.Add(float64(removed))
 	g.Log(SWEEP_EXPIRED, removed, key)
 }
