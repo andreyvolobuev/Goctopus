@@ -39,6 +39,8 @@ const (
 	LIST_KEYS_ERR            = "could not get list of keys for %s"
 	INVALID_KEY              = "invalid message key"
 	INVALID_VALUE            = "invalid message value"
+	INVALID_EXPIRE           = "invalid message expire duration"
+	SWEEP_EXPIRED            = "swept %d expired message(s) from key: %s"
 	MESSAGE                  = "message"
 	MULTIPLE                 = "s"
 	ALL                      = "all "
@@ -68,14 +70,23 @@ const (
 	WS_PASSWORD   = "WS_PASSWORD"
 	WS_AUTH_URL   = "WS_AUTH_URL"
 
+	WS_INSECURE_NO_AUTH = "WS_INSECURE_NO_AUTH"
+	WS_AUTH_TIMEOUT     = "WS_AUTH_TIMEOUT"
+	WS_SWEEP_INTERVAL   = "WS_SWEEP_INTERVAL"
+	WS_PING_INTERVAL    = "WS_PING_INTERVAL"
+	WS_READ_TIMEOUT     = "WS_READ_TIMEOUT"
+
 	// query parameters
 	KEY = "key"
 	ID  = "id"
 
 	// routes
-	ROOT = "/"
-	WS   = "/ws"
-	WS_  = "/ws/"
+	ROOT    = "/"
+	WS      = "/ws"
+	WS_     = "/ws/"
+	HEALTHZ = "/healthz"
+	READYZ  = "/readyz"
+	METRICS = "/metrics"
 
 	// headers
 	CONTENT_TYPE     = "Content-Type"

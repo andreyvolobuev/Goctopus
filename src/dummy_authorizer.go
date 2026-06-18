@@ -11,6 +11,6 @@ func (d *DummyAuthorizer) Authorize(g *Goctopus, r *http.Request) ([]string, err
 }
 
 func (d *DummyAuthorizer) Init() error {
-	d.keys = append(d.keys, authUrl)
+	d.keys = []string{authUrl}
 	return nil
 }

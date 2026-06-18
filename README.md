@@ -81,21 +81,57 @@ docker run \
 - WS_STORAGE (flag --storage): which message storage to use. Valid options are: "default" / "memory" (these two are same. More storages are to be implemented later. Redis is the next one to come)
 - WS_AUTHORIZER (flag --authorizer): which authorization engine to use. Valid options are: "default" / "proxy" (same) or "dummy" (use for development only)
 - WS_AUTH_URL (flag --auth): forward incomming requests from frontend to this URL in order to authorize a request or use this value as a dummy authorizer return
+- WS_AUTH_TIMEOUT (flag --auth-timeout): timeout for requests to the auth backend (default `10s`). Prevents a hung auth server from pinning a worker
+- WS_SWEEP_INTERVAL (flag --sweep-interval): how often expired messages are swept from storage in the background (default `1m`)
+- WS_PING_INTERVAL (flag --ping-interval): how often idle websocket connections are pinged for keepalive (default `30s`)
+- WS_READ_TIMEOUT (flag --read-timeout): drop a connection if no frame (including a pong) arrives within this time (default `70s`)
+- WS_INSECURE_NO_AUTH (flag --insecure-no-auth): allow unauthenticated POST requests. **DEVELOPMENT ONLY** — see Security below
+
+
+### Security
+
+- **Backend POST requests fail closed.** If `WS_LOGIN`/`WS_PASSWORD` are not set, POST requests are rejected with `401` instead of being silently accepted. To intentionally run without backend auth (local development), set `WS_INSECURE_NO_AUTH=1`.
+- Credentials are compared in constant time to avoid timing attacks.
+- Run Goctopus behind a TLS-terminating reverse proxy (nginx/Caddy/Traefik) so that both the websocket (`wss://`) and the backend POST traffic are encrypted. Goctopus itself speaks plain HTTP/ws.
+- The auth backend (`WS_AUTH_URL`) receives the raw upgrade request including cookies/headers; make sure it is trusted and reachable only over a private network or TLS.
+
+
+### Operational endpoints
+
+- `GET /healthz` — liveness probe, always `200 ok` while the process is up
+- `GET /readyz` — readiness probe, `200` once storage and authorizer are initialized
+- `GET /metrics` — Prometheus text exposition format with counters
+  (`goctopus_messages_received_total`, `goctopus_messages_delivered_total`,
+  `goctopus_messages_expired_total`, `goctopus_auth_failures_total`) and gauges
+  (`goctopus_connections`, `goctopus_keys`)
 
 
 ### Use
 
-- frontend should create a websocket instance and declare a handler for incoming messages
-```
-let socket = new WebSocket("ws://goctopus:7890");
+- frontend should create a websocket instance and declare a handler for incoming messages. Because delivery is at-least-once (a message is re-sent if its ACK times out), clients should de-duplicate by message id:
+```js
+const seen = new Set();
 
-socket.onmessage = function(event) {
-  // send the message id back to goctopus so it knows the message has been received and processed
-  d = JSON.parse(event.data)
-  socket.send(JSON.stringify({"id": d.id}))
-  // do something with data that commes from backend
-  console.log(d)
-};
+function connect() {
+  const socket = new WebSocket("ws://goctopus:7890");
+
+  socket.onmessage = (event) => {
+    const d = JSON.parse(event.data);
+    // ACK the message id so Goctopus marks it delivered
+    socket.send(JSON.stringify({ id: d.id }));
+
+    if (seen.has(d.id)) return; // ignore duplicates
+    seen.add(d.id);
+
+    // do something with the payload that came from the backend
+    console.log(d.payload);
+  };
+
+  // auto-reconnect with a small backoff
+  socket.onclose = () => setTimeout(connect, 1000);
+}
+
+connect();
 ```
 
 
@@ -132,3 +168,32 @@ Goctopus server supports the following HTTP API:
 * `GET ?key=<key>` Returns all messages stored for a provided key
 * `POST ?key=<key>&value=<value>&expire=<expire:optional>` Saves a message (value) for a given username (key)
 * `DELETE ?key=<key:optional>&id=<id:optional>` Deletes messages. If key is set but message id is not, then all messages for given key will be deleted. If both key and message id are set then only message with given key will be deleted. If key and message id are not set then all messages for all keys will be deleted.
+
+
+### How it compares
+
+Goctopus targets one specific niche: **add push without changing your backend's stack**. Your backend keeps doing what it does and just fires HTTP POSTs.
+
+- **Centrifugo / Soketi** are full-featured realtime servers (channels, presence, history) but expect you to integrate their client SDKs and publish API.
+- **Mercure** is great for SSE/hub semantics over HTTP.
+- **Goctopus** deliberately stays tiny: HTTP in, websocket out, pluggable auth via your existing endpoint, at-least-once delivery with per-message TTL.
+
+
+### Delivery model
+
+Delivery is **asynchronous and at-least-once**. A backend POST queues a message and Goctopus writes it to every connected client for that key without blocking. Each connection has a dedicated read loop that:
+
+- removes a message from the queue when the client ACKs it (`{"id": "<id>"}`),
+- answers pings and treats pongs as keepalive,
+- unregisters the connection on close or read timeout.
+
+A message is written to a given connection at most once while awaiting its ACK (in-flight de-duplication), so re-flushing a key never spams already-pending messages. Unacked messages are re-delivered when the client reconnects, and expired messages are removed by the background sweeper. Because the same message id can still arrive after a reconnect, clients should de-duplicate by id (see the snippet above).
+
+
+### Roadmap
+
+- [ ] Redis storage backend (interface is already in place — see [src/storage.go](src/storage.go)) for persistence and horizontal scaling
+- [x] Asynchronous ACK protocol with per-connection read loop and ping/pong keepalive
+- [ ] Native TLS / `wss://` listener option
+- [ ] Wildcard topics and explicit broadcast vs direct messaging
+- [ ] Client SDKs (JS/TS, Python, Go) with built-in reconnect and de-duplication
