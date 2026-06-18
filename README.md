@@ -93,6 +93,7 @@ docker run \
 - WS_MAX_MESSAGE_SIZE (flag --max-message-size): max bytes of a POST body / inbound websocket message (default `1048576`)
 - WS_COMPRESS (flag --compress): enable permessage-deflate compression for websocket connections (default `false`)
 - WS_RATE_LIMIT / WS_RATE_BURST (flags --rate-limit / --rate-burst): per-client-IP request rate (events/sec) and burst for the API and ws upgrades; `0` disables (default off)
+- WS_TRUST_PROXY_HEADERS (flag --trust-proxy-headers): use `X-Forwarded-For`/`X-Real-IP` for the client IP when rate limiting. Enable **only** behind a trusted proxy/LB that sets them, otherwise clients can spoof their IP (default `false`)
 - WS_ALLOWED_ORIGINS (flag --allowed-origins): comma-separated whitelist of browser Origins allowed to open websockets (empty = any, `*` = any)
 - WS_AUTH_CACHE_TTL (flag --auth-cache-ttl): cache proxy-auth results per credential for this duration to avoid a backend round-trip on every connect; `0` disables (default `0`)
 - WS_REDIS_KEY_TTL (flag --redis-key-ttl): Redis EXPIRE backstop on each queue key; `0` disables (default `24h`)

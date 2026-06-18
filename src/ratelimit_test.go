@@ -1,9 +1,26 @@
 package main
 
 import (
+	"net/http/httptest"
 	"testing"
 	"time"
 )
+
+func TestClientIPTrustProxyHeaders(t *testing.T) {
+	r := httptest.NewRequest("GET", "/", nil)
+	r.RemoteAddr = "10.0.0.1:5555"
+	r.Header.Set("X-Forwarded-For", "203.0.113.7, 10.0.0.1")
+
+	trusting := &Goctopus{config: &Config{TrustProxyHeaders: true}}
+	if ip := trusting.clientIP(r); ip != "203.0.113.7" {
+		t.Fatalf("trusted XFF: got %q, want 203.0.113.7", ip)
+	}
+
+	notrust := &Goctopus{config: &Config{TrustProxyHeaders: false}}
+	if ip := notrust.clientIP(r); ip != "10.0.0.1" {
+		t.Fatalf("untrusted: got %q, want 10.0.0.1 (RemoteAddr)", ip)
+	}
+}
 
 func TestRateLimiterBurstAndRefill(t *testing.T) {
 	now := time.Unix(0, 0)

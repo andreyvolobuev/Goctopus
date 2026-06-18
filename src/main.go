@@ -135,6 +135,7 @@ func main() {
 		compression      = flag.String("compress", envOr(WS_COMPRESS, "false"), "Enable permessage-deflate compression for websocket connections")
 		rateLimit        = flag.String("rate-limit", envOr(WS_RATE_LIMIT, "0"), "Per-client-IP request rate (events/sec) for the API and ws upgrades; 0 disables")
 		rateBurst        = flag.String("rate-burst", envOr(WS_RATE_BURST, "0"), "Token-bucket burst capacity for --rate-limit")
+		trustProxy       = flag.String("trust-proxy-headers", envOr(WS_TRUST_PROXY_HEADERS, "false"), "Honour X-Forwarded-For/X-Real-IP for client IP (only behind a trusted proxy)")
 		configPath       = flag.String("config", os.Getenv(WS_CONFIG), "Path to a YAML config file (keys are flag names; explicit flags override it)")
 		healthcheck      = flag.Bool("healthcheck", false, "Probe /healthz on the configured port and exit 0/1 (for container HEALTHCHECK)")
 	)
@@ -199,6 +200,7 @@ func main() {
 		Compression:       parseBool(*compression),
 		RateLimit:         rl,
 		RateBurst:         rb,
+		TrustProxyHeaders: parseBool(*trustProxy),
 	}
 
 	validateConfig(cfg)

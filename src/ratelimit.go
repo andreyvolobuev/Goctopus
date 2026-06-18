@@ -3,6 +3,7 @@ package main
 import (
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -85,10 +86,24 @@ func (g *Goctopus) allow(r *http.Request) bool {
 	if g.limiter == nil {
 		return true
 	}
-	return g.limiter.Allow(clientIP(r))
+	return g.limiter.Allow(g.clientIP(r))
 }
 
-func clientIP(r *http.Request) string {
+// clientIP resolves the client IP for rate limiting. When TrustProxyHeaders is
+// enabled (only safe behind a trusted reverse proxy that sets them), it honours
+// X-Forwarded-For / X-Real-IP so limiting is per real client, not per proxy.
+func (g *Goctopus) clientIP(r *http.Request) string {
+	if g.config.TrustProxyHeaders {
+		if xff := r.Header.Get("X-Forwarded-For"); xff != EMPTY_STR {
+			if i := strings.IndexByte(xff, ','); i >= 0 {
+				return strings.TrimSpace(xff[:i]) // first hop = original client
+			}
+			return strings.TrimSpace(xff)
+		}
+		if xr := r.Header.Get("X-Real-IP"); xr != EMPTY_STR {
+			return strings.TrimSpace(xr)
+		}
+	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return r.RemoteAddr

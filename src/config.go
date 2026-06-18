@@ -61,6 +61,10 @@ type Config struct {
 	// capacity.
 	RateLimit float64
 	RateBurst int
+	// TrustProxyHeaders makes client-IP resolution honour X-Forwarded-For /
+	// X-Real-IP. Only enable behind a trusted proxy that sets them, otherwise
+	// clients can spoof their IP to evade rate limiting.
+	TrustProxyHeaders bool
 
 	TLSCert string
 	TLSKey  string
