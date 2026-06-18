@@ -13,6 +13,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"math/rand"
 	"net"
 	"time"
 
@@ -40,6 +41,7 @@ type Client struct {
 	OnMessage   func(payload any, id string)
 	MinBackoff  time.Duration
 	MaxBackoff  time.Duration
+	MaxRetries  int // 0 = unlimited
 	DedupeLimit int
 
 	seen      map[string]struct{}
@@ -57,20 +59,29 @@ func New(url string, onMessage func(payload any, id string)) *Client {
 	}
 }
 
-// Run connects and keeps reconnecting until ctx is cancelled.
+// Run connects and keeps reconnecting until ctx is cancelled (or MaxRetries is
+// exhausted). Reconnects use exponential backoff with full jitter.
 func (c *Client) Run(ctx context.Context) error {
 	backoff := c.MinBackoff
+	retries := 0
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		if err := c.session(ctx); err == nil {
 			backoff = c.MinBackoff
+			retries = 0
 		}
+		if c.MaxRetries > 0 && retries >= c.MaxRetries {
+			return ctx.Err()
+		}
+		retries++
+		// full jitter: sleep a random duration in [0, backoff)
+		delay := time.Duration(rand.Int63n(int64(backoff) + 1))
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(backoff):
+		case <-time.After(delay):
 		}
 		backoff *= 2
 		if backoff > c.MaxBackoff {

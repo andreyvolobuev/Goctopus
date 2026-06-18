@@ -1,0 +1,15 @@
+{
+  "name": "goctopus-client",
+  "version": "0.1.0",
+  "description": "Browser/Node client for the Goctopus websocket gateway (ACK, de-duplication, reconnect with jittered backoff).",
+  "main": "goctopus.js",
+  "types": "goctopus.d.ts",
+  "files": ["goctopus.js", "goctopus.d.ts", "README.md"],
+  "keywords": ["websocket", "goctopus", "push", "realtime"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/andreyvolobuev/Goctopus.git",
+    "directory": "clients/javascript"
+  }
+}

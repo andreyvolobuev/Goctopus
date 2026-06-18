@@ -24,11 +24,13 @@ class GoctopusClient {
     this.WebSocket = opts.WebSocket || (typeof WebSocket !== "undefined" ? WebSocket : null);
     this.minBackoff = opts.minBackoff || 500;
     this.maxBackoff = opts.maxBackoff || 10000;
+    this.maxRetries = opts.maxRetries == null ? Infinity : opts.maxRetries;
     this.dedupeLimit = opts.dedupeLimit || 1000;
 
     this._seen = new Set();
     this._seenOrder = [];
     this._backoff = this.minBackoff;
+    this._retries = 0;
     this._stopped = false;
     this._socket = null;
   }
@@ -51,6 +53,7 @@ class GoctopusClient {
 
     socket.onopen = () => {
       this._backoff = this.minBackoff;
+      this._retries = 0;
       this.onOpen();
     };
 
@@ -75,7 +78,11 @@ class GoctopusClient {
     socket.onclose = () => {
       this.onClose();
       if (this._stopped) return;
-      setTimeout(() => this._open(), this._backoff);
+      if (this._retries >= this.maxRetries) return;
+      this._retries++;
+      // Exponential backoff with full jitter to avoid reconnect stampedes.
+      const delay = Math.random() * this._backoff;
+      setTimeout(() => this._open(), delay);
       this._backoff = Math.min(this._backoff * 2, this.maxBackoff);
     };
 
