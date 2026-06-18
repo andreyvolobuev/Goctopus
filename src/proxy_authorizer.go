@@ -39,6 +39,7 @@ type ProxyAuthorizer struct {
 	clock    func() time.Time
 	mu       sync.Mutex
 	cache    map[uint64]authCacheEntry
+	puts     int
 }
 
 type authCacheEntry struct {
@@ -83,6 +84,18 @@ func (a *ProxyAuthorizer) cachePut(r *http.Request, keys []string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.cache[k] = authCacheEntry{keys: keys, exp: a.clock().Add(a.cacheTTL)}
+
+	// Periodically evict expired entries so the cache doesn't grow without
+	// bound as distinct credentials come and go.
+	a.puts++
+	if a.puts%256 == 0 {
+		now := a.clock()
+		for key, e := range a.cache {
+			if now.After(e.exp) {
+				delete(a.cache, key)
+			}
+		}
+	}
 }
 
 func (a *ProxyAuthorizer) Authorize(g *Goctopus, r *http.Request) ([]string, error) {
@@ -100,6 +113,7 @@ func (a *ProxyAuthorizer) Authorize(g *Goctopus, r *http.Request) ([]string, err
 		g.Log(ERR_TEMPLATE, err)
 		return nil, err
 	}
+	defer resp.Body.Close() // avoid leaking the connection/fd on every auth call
 
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
