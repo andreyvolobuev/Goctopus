@@ -54,6 +54,7 @@ func main() {
 		tlsCert          = flag.String("tls-cert", os.Getenv(WS_TLS_CERT), "Path to TLS certificate file. Set with --tls-key to serve over TLS (wss://)")
 		tlsKey           = flag.String("tls-key", os.Getenv(WS_TLS_KEY), "Path to TLS private key file")
 		allowedOrigins   = flag.String("allowed-origins", os.Getenv(WS_ALLOWED_ORIGINS), "Comma-separated whitelist of browser Origins allowed to open websockets (empty = any, '*' = any)")
+		maxMessageSize   = flag.String("max-message-size", envOr(WS_MAX_MESSAGE_SIZE, "1048576"), "Maximum size in bytes of a POST body / inbound websocket message")
 	)
 	flag.Parse()
 
@@ -64,6 +65,11 @@ func main() {
 	nWorkers, err := strconv.Atoi(*workers)
 	if err != nil {
 		panic(WS_WORKERS_NOT_FOUND)
+	}
+
+	maxMsg, err := strconv.ParseInt(*maxMessageSize, 10, 64)
+	if err != nil || maxMsg <= 0 {
+		maxMsg = 1 << 20
 	}
 
 	cfg := &Config{
@@ -86,6 +92,7 @@ func main() {
 		TLSCert:          *tlsCert,
 		TLSKey:           *tlsKey,
 		AllowedOrigins:   splitCSV(*allowedOrigins),
+		MaxMessageBytes:  maxMsg,
 	}
 
 	app := Goctopus{}
@@ -104,8 +111,11 @@ func main() {
 	fmt.Printf("----------------------------------\n\n")
 
 	srv := &http.Server{
-		Addr:    fmt.Sprintf("%s:%s", cfg.Host, cfg.Port),
-		Handler: &app,
+		Addr:              fmt.Sprintf("%s:%s", cfg.Host, cfg.Port),
+		Handler:           &app,
+		ReadHeaderTimeout: 10 * time.Second, // Slowloris protection
+		ReadTimeout:       30 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	// Graceful shutdown: stop accepting on SIGINT/SIGTERM and drain in-flight

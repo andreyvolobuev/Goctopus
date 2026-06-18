@@ -90,6 +90,7 @@ func (g *Goctopus) readLoop(c *client) {
 	defer g.removeClient(c)
 
 	rd := wsutil.NewServerSideReader(c.conn)
+	rd.MaxFrameSize = g.config.MaxMessageBytes // reject oversized single frames
 	for {
 		c.conn.SetReadDeadline(time.Now().Add(g.config.ReadTimeout))
 
@@ -97,9 +98,13 @@ func (g *Goctopus) readLoop(c *client) {
 		if err != nil {
 			return
 		}
-		payload, err := io.ReadAll(rd)
+		// Bound the total message size (covers fragmented messages too).
+		payload, err := io.ReadAll(io.LimitReader(rd, g.config.MaxMessageBytes+1))
 		if err != nil {
 			return
+		}
+		if int64(len(payload)) > g.config.MaxMessageBytes {
+			return // oversized message, drop the connection
 		}
 
 		switch hdr.OpCode {

@@ -21,6 +21,7 @@ func testConfig(key string) *Config {
 		PingInterval:     time.Hour,
 		ReadTimeout:      30 * time.Second,
 		AuthTimeout:      10 * time.Second,
+		MaxMessageBytes:  1 << 20,
 	}
 }
 

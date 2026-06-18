@@ -32,6 +32,10 @@ type Config struct {
 	PingInterval  time.Duration
 	ReadTimeout   time.Duration
 
+	// MaxMessageBytes bounds a single POST body and a single inbound websocket
+	// message, protecting against memory-exhaustion DoS.
+	MaxMessageBytes int64
+
 	TLSCert string
 	TLSKey  string
 

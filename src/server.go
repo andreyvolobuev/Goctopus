@@ -111,6 +111,8 @@ func (g *Goctopus) handleWs(w http.ResponseWriter, r *http.Request) {
 func (g *Goctopus) handlePost(w http.ResponseWriter, r *http.Request) {
 	g.Log(POST_NEW_MSG)
 
+	r.Body = http.MaxBytesReader(w, r.Body, g.config.MaxMessageBytes)
+
 	m := Message{}
 	if err := m.unmarshal(r.Body, g.config.DefaultExpire); err != nil {
 		g.Log(ERR_TEMPLATE, err)

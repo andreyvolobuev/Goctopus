@@ -136,6 +136,26 @@ func TestPostThenGetMessage(t *testing.T) {
 	}
 }
 
+// A POST body larger than MaxMessageBytes is rejected instead of being read
+// into memory unbounded.
+func TestPostBodyTooLarge(t *testing.T) {
+	app := newTestAppCfg(t, func(c *Config) {
+		withCreds(c)
+		c.MaxMessageBytes = 32
+	})
+
+	big := strings.Repeat("x", 1024)
+	body := strings.NewReader(`{"key":"k","value":"` + big + `"}`)
+	req := httptest.NewRequest(http.MethodPost, "/", body)
+	req.SetBasicAuth("admin", "secret")
+	w := httptest.NewRecorder()
+	app.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want %d for oversized body, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
 // Security: the backend API (GET/DELETE) must require auth, not just POST.
 func TestGetAndDeleteRequireAuth(t *testing.T) {
 	app := newTestAppCfg(t, withCreds)

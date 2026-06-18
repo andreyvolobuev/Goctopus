@@ -86,6 +86,7 @@ const (
 	WS_TLS_CERT         = "WS_TLS_CERT"
 	WS_TLS_KEY          = "WS_TLS_KEY"
 	WS_ALLOWED_ORIGINS  = "WS_ALLOWED_ORIGINS"
+	WS_MAX_MESSAGE_SIZE = "WS_MAX_MESSAGE_SIZE"
 
 	// query parameters
 	KEY = "key"
