@@ -69,6 +69,20 @@ func applyConfigFile(path string) {
 	})
 }
 
+// runHealthcheck probes the local /healthz endpoint and exits 0 (healthy) or 1.
+func runHealthcheck(port string) {
+	client := http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%s/healthz", port))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "healthcheck:", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		os.Exit(1)
+	}
+}
+
 // validateConfig logs warnings for configurations that are valid but likely
 // mistakes.
 func validateConfig(cfg *Config) {
@@ -122,11 +136,18 @@ func main() {
 		rateLimit        = flag.String("rate-limit", envOr(WS_RATE_LIMIT, "0"), "Per-client-IP request rate (events/sec) for the API and ws upgrades; 0 disables")
 		rateBurst        = flag.String("rate-burst", envOr(WS_RATE_BURST, "0"), "Token-bucket burst capacity for --rate-limit")
 		configPath       = flag.String("config", os.Getenv(WS_CONFIG), "Path to a YAML config file (keys are flag names; explicit flags override it)")
+		healthcheck      = flag.Bool("healthcheck", false, "Probe /healthz on the configured port and exit 0/1 (for container HEALTHCHECK)")
 	)
 	flag.Parse()
 
 	if *configPath != EMPTY_STR {
 		applyConfigFile(*configPath)
+	}
+
+	// Self-healthcheck mode: usable as a container HEALTHCHECK without a shell.
+	if *healthcheck {
+		runHealthcheck(*port)
+		return
 	}
 
 	if *authURL == EMPTY_STR {
