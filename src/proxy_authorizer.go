@@ -3,9 +3,12 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"hash/fnv"
 	"io"
 	"net/http"
 	"net/url"
+	"sync"
+	"time"
 )
 
 type AuthResponse struct {
@@ -31,9 +34,64 @@ func (r *AuthResponse) Export() []string {
 type ProxyAuthorizer struct {
 	url    *url.URL
 	client *http.Client
+
+	cacheTTL time.Duration
+	clock    func() time.Time
+	mu       sync.Mutex
+	cache    map[uint64]authCacheEntry
+}
+
+type authCacheEntry struct {
+	keys []string
+	exp  time.Time
+}
+
+// cacheKey identifies a request by the credentials that determine identity
+// (cookies and Authorization header), not by URL.
+func cacheKey(r *http.Request) (uint64, bool) {
+	cookie := r.Header.Get("Cookie")
+	authz := r.Header.Get("Authorization")
+	if cookie == EMPTY_STR && authz == EMPTY_STR {
+		return 0, false
+	}
+	h := fnv.New64a()
+	h.Write([]byte(cookie))
+	h.Write([]byte{0})
+	h.Write([]byte(authz))
+	return h.Sum64(), true
+}
+
+func (a *ProxyAuthorizer) cacheGet(r *http.Request) ([]string, bool) {
+	k, ok := cacheKey(r)
+	if !ok {
+		return nil, false
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	e, ok := a.cache[k]
+	if !ok || a.clock().After(e.exp) {
+		return nil, false
+	}
+	return e.keys, true
+}
+
+func (a *ProxyAuthorizer) cachePut(r *http.Request, keys []string) {
+	k, ok := cacheKey(r)
+	if !ok {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.cache[k] = authCacheEntry{keys: keys, exp: a.clock().Add(a.cacheTTL)}
 }
 
 func (a *ProxyAuthorizer) Authorize(g *Goctopus, r *http.Request) ([]string, error) {
+	if a.cacheTTL > 0 {
+		if keys, ok := a.cacheGet(r); ok {
+			return keys, nil
+		}
+	}
+
 	r.URL = a.url
 	r.RequestURI = EMPTY_STR
 
@@ -59,6 +117,9 @@ func (a *ProxyAuthorizer) Authorize(g *Goctopus, r *http.Request) ([]string, err
 	if len(keys) == 0 {
 		return nil, errors.New(AUTH_INVALID_CREDS)
 	}
+	if a.cacheTTL > 0 {
+		a.cachePut(r, keys)
+	}
 	return keys, nil
 }
 
@@ -71,5 +132,9 @@ func (a *ProxyAuthorizer) Init(cfg *Config) error {
 
 	// Bound the auth call so a hung auth backend can't pin a worker forever.
 	a.client = &http.Client{Timeout: cfg.AuthTimeout}
+
+	a.cacheTTL = cfg.AuthCacheTTL
+	a.clock = time.Now
+	a.cache = make(map[uint64]authCacheEntry)
 	return nil
 }

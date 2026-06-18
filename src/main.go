@@ -47,6 +47,7 @@ func main() {
 		authorizerEngine = flag.String("authorizer", envOr(WS_AUTHORIZER, DEFAULT), "Authorizer engine used to authorize incoming requests (proxy/dummy)")
 		insecureNoAuth   = flag.String("insecure-no-auth", envOr(WS_INSECURE_NO_AUTH, "false"), "Allow unauthenticated POST requests (DEVELOPMENT ONLY)")
 		authTimeout      = flag.String("auth-timeout", envOr(WS_AUTH_TIMEOUT, "10s"), "Timeout for requests to the auth backend")
+		authCacheTTL     = flag.String("auth-cache-ttl", envOr(WS_AUTH_CACHE_TTL, "0"), "Cache proxy-auth results per credential for this duration; 0 disables")
 		sweepInterval    = flag.String("sweep-interval", envOr(WS_SWEEP_INTERVAL, "1m"), "How often expired messages are swept from storage")
 		pingInterval     = flag.String("ping-interval", envOr(WS_PING_INTERVAL, "30s"), "How often to ping idle websocket connections (keepalive)")
 		readTimeout      = flag.String("read-timeout", envOr(WS_READ_TIMEOUT, "70s"), "Drop a websocket connection if no frame (incl. pong) arrives within this time")
@@ -93,6 +94,7 @@ func main() {
 		AuthorizerEngine:  *authorizerEngine,
 		AuthURL:           *authURL,
 		AuthTimeout:       parseDurationOr(*authTimeout, 10*time.Second),
+		AuthCacheTTL:      parseDurationOr(*authCacheTTL, 0),
 		RedisURL:          *redisURL,
 		RedisKeyTTL:       parseDurationOr(*redisKeyTTL, 0),
 		SweepInterval:     parseDurationOr(*sweepInterval, time.Minute),

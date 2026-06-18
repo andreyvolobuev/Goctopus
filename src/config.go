@@ -26,7 +26,11 @@ type Config struct {
 
 	AuthURL     string // also used as the single key by the dummy authorizer
 	AuthTimeout time.Duration
-	RedisURL    string
+	// AuthCacheTTL, when > 0, caches the proxy authorizer's result per
+	// credential (cookie/authorization) for this duration so repeated connects
+	// don't hit the auth backend every time. 0 disables caching.
+	AuthCacheTTL time.Duration
+	RedisURL     string
 	// RedisKeyTTL sets a Redis EXPIRE on each queue key as a backstop so
 	// abandoned keys are reclaimed even if the sweeper never runs. 0 disables.
 	RedisKeyTTL time.Duration
