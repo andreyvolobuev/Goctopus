@@ -37,6 +37,12 @@ type Config struct {
 	// message, protecting against memory-exhaustion DoS.
 	MaxMessageBytes int64
 
+	// RateLimit is the per-client-IP request rate (events/sec) for the backend
+	// API and websocket upgrades; 0 disables limiting. RateBurst is the bucket
+	// capacity.
+	RateLimit float64
+	RateBurst int
+
 	TLSCert string
 	TLSKey  string
 

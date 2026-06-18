@@ -56,6 +56,8 @@ func main() {
 		tlsKey           = flag.String("tls-key", os.Getenv(WS_TLS_KEY), "Path to TLS private key file")
 		allowedOrigins   = flag.String("allowed-origins", os.Getenv(WS_ALLOWED_ORIGINS), "Comma-separated whitelist of browser Origins allowed to open websockets (empty = any, '*' = any)")
 		maxMessageSize   = flag.String("max-message-size", envOr(WS_MAX_MESSAGE_SIZE, "1048576"), "Maximum size in bytes of a POST body / inbound websocket message")
+		rateLimit        = flag.String("rate-limit", envOr(WS_RATE_LIMIT, "0"), "Per-client-IP request rate (events/sec) for the API and ws upgrades; 0 disables")
+		rateBurst        = flag.String("rate-burst", envOr(WS_RATE_BURST, "0"), "Token-bucket burst capacity for --rate-limit")
 	)
 	flag.Parse()
 
@@ -72,6 +74,9 @@ func main() {
 	if err != nil || maxMsg <= 0 {
 		maxMsg = 1 << 20
 	}
+
+	rl, _ := strconv.ParseFloat(*rateLimit, 64)
+	rb, _ := strconv.Atoi(*rateBurst)
 
 	cfg := &Config{
 		Host:             *host,
@@ -95,6 +100,8 @@ func main() {
 		TLSKey:           *tlsKey,
 		AllowedOrigins:   splitCSV(*allowedOrigins),
 		MaxMessageBytes:  maxMsg,
+		RateLimit:        rl,
+		RateBurst:        rb,
 	}
 
 	app := Goctopus{}

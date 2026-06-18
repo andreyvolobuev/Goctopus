@@ -34,6 +34,11 @@ func (g *Goctopus) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (g *Goctopus) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(CONTENT_TYPE, APPLICATION_JSON)
 
+	if !g.allow(r) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		return
+	}
+
 	// The whole JSON API (publish, list keys, read and delete messages) is a
 	// backend-only surface: it must be authenticated, not just POST. Listing
 	// keys leaks user identifiers and DELETE can wipe every queue.
@@ -54,6 +59,11 @@ func (g *Goctopus) handleHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (g *Goctopus) handleWs(w http.ResponseWriter, r *http.Request) {
+	if !g.allow(r) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		return
+	}
+
 	// Reject cross-origin upgrades (CSWSH) before doing any work.
 	if origin := r.Header.Get(ORIGIN); !g.config.originAllowed(origin) {
 		g.Log(ORIGIN_REJECTED, origin)

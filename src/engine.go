@@ -37,7 +37,8 @@ type Goctopus struct {
 	storage    Storage
 	authorizer Authorizer
 
-	config *Config
+	config  *Config
+	limiter *rateLimiter
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -68,6 +69,10 @@ func (g *Goctopus) Start(cfg *Config) {
 	g.work = make(chan func(), queueCap)
 	for i := 0; i < cfg.Workers; i++ {
 		go g.worker()
+	}
+
+	if cfg.RateLimit > 0 {
+		g.limiter = newRateLimiter(cfg.RateLimit, cfg.RateBurst)
 	}
 
 	// If the storage backend supports cross-instance notifications (Redis),
