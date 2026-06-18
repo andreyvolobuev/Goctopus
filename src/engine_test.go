@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/gobwas/ws"
 	"github.com/google/uuid"
 )
 
@@ -55,6 +57,42 @@ func TestConcurrentAPINoRaceOrDeadlock(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("concurrent API access deadlocked")
 	}
+}
+
+// Disconnecting clients must not leak goroutines: both readLoop and pingLoop
+// have to exit promptly (pingLoop via the per-connection done channel, not only
+// on the next ping tick).
+func TestNoGoroutineLeakOnDisconnect(t *testing.T) {
+	app := newTestApp(t)
+	ts := httptest.NewServer(app)
+	defer ts.Close()
+
+	// Warm up, then take a baseline.
+	for i := 0; i < 3; i++ {
+		c := dialWS(t, ws.Dialer{}, wsURL(ts))
+		waitFor(t, func() bool { return connCount(app, "testkey") == 1 }, "registered")
+		c.Close()
+		waitFor(t, func() bool { return connCount(app, "testkey") == 0 }, "unregistered")
+	}
+	time.Sleep(100 * time.Millisecond)
+	base := runtime.NumGoroutine()
+
+	for i := 0; i < 30; i++ {
+		c := dialWS(t, ws.Dialer{}, wsURL(ts))
+		waitFor(t, func() bool { return connCount(app, "testkey") == 1 }, "registered")
+		c.Close()
+		waitFor(t, func() bool { return connCount(app, "testkey") == 0 }, "unregistered")
+	}
+
+	// Goroutines should settle back near the baseline (pingLoops exited).
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if runtime.NumGoroutine() <= base+5 {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("goroutines did not settle: base=%d now=%d (pingLoop leak?)", base, runtime.NumGoroutine())
 }
 
 // The background sweeper removes expired messages from a key nobody reconnects

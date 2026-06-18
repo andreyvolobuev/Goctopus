@@ -199,8 +199,22 @@ func (g *Goctopus) schedule(task func()) {
 }
 
 func (g *Goctopus) worker() {
-	for task := range g.work {
-		g.runTask(task)
+	for {
+		select {
+		case task := <-g.work:
+			g.runTask(task)
+		case <-g.ctx.Done():
+			// Drain already-queued tasks (best effort), then exit so the worker
+			// doesn't leak on Stop.
+			for {
+				select {
+				case task := <-g.work:
+					g.runTask(task)
+				default:
+					return
+				}
+			}
+		}
 	}
 }
 

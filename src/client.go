@@ -34,6 +34,7 @@ type client struct {
 	imu      sync.Mutex
 	inflight map[uuid.UUID]string // message id -> concrete storage key, awaiting ACK
 	closed   bool
+	done     chan struct{} // closed when the connection is closed
 }
 
 func newClient(conn net.Conn, keys []string, writeTimeout time.Duration, compress bool) *client {
@@ -43,6 +44,7 @@ func newClient(conn net.Conn, keys []string, writeTimeout time.Duration, compres
 		writeTimeout: writeTimeout,
 		compress:     compress,
 		inflight:     make(map[uuid.UUID]string),
+		done:         make(chan struct{}),
 	}
 }
 
@@ -125,6 +127,7 @@ func (c *client) close() {
 		return
 	}
 	c.closed = true
+	close(c.done)
 	c.conn.Close()
 }
 
@@ -221,6 +224,8 @@ func (g *Goctopus) pingLoop(c *client) {
 	defer ticker.Stop()
 	for {
 		select {
+		case <-c.done:
+			return // connection already closed (e.g. by readLoop); exit promptly
 		case <-g.ctx.Done():
 			c.close()
 			return
