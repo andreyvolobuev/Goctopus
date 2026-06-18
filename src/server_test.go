@@ -136,6 +136,37 @@ func TestPostThenGetMessage(t *testing.T) {
 	}
 }
 
+// History records recently published messages and serves them via GET ?history.
+func TestHistoryEndpoint(t *testing.T) {
+	app := newTestAppCfg(t, func(c *Config) {
+		withCreds(c)
+		c.HistorySize = 10
+		c.HistoryTTL = time.Hour
+	})
+
+	body := strings.NewReader(`{"key":"room","value":{"msg":"hi"}}`)
+	post := httptest.NewRequest(http.MethodPost, "/", body)
+	post.SetBasicAuth("admin", "secret")
+	app.ServeHTTP(httptest.NewRecorder(), post)
+
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) && queueLen(app, "room") == 0 {
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	get := httptest.NewRequest(http.MethodGet, "/?key=room&history", nil)
+	get.SetBasicAuth("admin", "secret")
+	w := httptest.NewRecorder()
+	app.ServeHTTP(w, get)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("history: want %d, got %d", http.StatusOK, w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "hi") {
+		t.Fatalf("history did not contain the message: %s", w.Body.String())
+	}
+}
+
 // A POST with multiple keys fans the message out to every key.
 func TestPostMultiKeyFanout(t *testing.T) {
 	app := newTestAppCfg(t, withCreds)

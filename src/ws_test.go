@@ -257,6 +257,29 @@ func TestReconcileDeliversMissedMessages(t *testing.T) {
 	}
 }
 
+// Presence reports keys that currently have live connections.
+func TestPresenceEndpoint(t *testing.T) {
+	app := newTestAppCfg(t, withCreds)
+	ts := httptest.NewServer(app)
+	defer ts.Close()
+
+	conn := dialWS(t, ws.Dialer{}, wsURL(ts))
+	defer conn.Close()
+	waitFor(t, func() bool { return connCount(app, "testkey") == 1 }, "connection registered")
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/?presence", nil)
+	req.SetBasicAuth("admin", "secret")
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("presence get: %v", err)
+	}
+	defer r.Body.Close()
+	body, _ := io.ReadAll(r.Body)
+	if !strings.Contains(string(body), "testkey") {
+		t.Fatalf("presence did not list the connected key: %s", body)
+	}
+}
+
 // Stop() closes active connections so a graceful shutdown drains cleanly.
 func TestStopClosesConnections(t *testing.T) {
 	app := newTestApp(t)

@@ -87,6 +87,8 @@ const (
 	WS_READ_TIMEOUT       = "WS_READ_TIMEOUT"
 	WS_WRITE_TIMEOUT      = "WS_WRITE_TIMEOUT"
 	WS_RECONCILE_INTERVAL = "WS_RECONCILE_INTERVAL"
+	WS_HISTORY_SIZE       = "WS_HISTORY_SIZE"
+	WS_HISTORY_TTL        = "WS_HISTORY_TTL"
 	WS_REDIS_URL          = "WS_REDIS_URL"
 	WS_REDIS_KEY_TTL      = "WS_REDIS_KEY_TTL"
 	WS_TLS_CERT           = "WS_TLS_CERT"
@@ -97,8 +99,10 @@ const (
 	WS_RATE_BURST         = "WS_RATE_BURST"
 
 	// query parameters
-	KEY = "key"
-	ID  = "id"
+	KEY      = "key"
+	ID       = "id"
+	PRESENCE = "presence"
+	HISTORY  = "history"
 
 	// routes
 	ROOT    = "/"

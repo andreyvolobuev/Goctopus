@@ -41,6 +41,7 @@ type Goctopus struct {
 	config  *Config
 	limiter *rateLimiter
 	logger  *slog.Logger
+	history *historyStore
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -90,6 +91,9 @@ func (g *Goctopus) Start(cfg *Config) {
 
 	if cfg.RateLimit > 0 {
 		g.limiter = newRateLimiter(cfg.RateLimit, cfg.RateBurst)
+	}
+	if cfg.HistorySize > 0 {
+		g.history = newHistoryStore(cfg.HistorySize, cfg.HistoryTTL)
 	}
 
 	// If the storage backend supports cross-instance notifications (Redis),

@@ -41,6 +41,11 @@ type Config struct {
 	ReadTimeout   time.Duration
 	WriteTimeout  time.Duration
 
+	// HistorySize is the per-key number of recently published messages retained
+	// for the history endpoint (0 disables). HistoryTTL bounds their age.
+	HistorySize int
+	HistoryTTL  time.Duration
+
 	// ReconcileInterval, when > 0, periodically re-flushes every key this
 	// instance has local connections for. It is a safety net for multi-instance
 	// Redis deployments where a pub/sub notification could be missed (Redis

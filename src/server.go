@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/subtle"
+	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -144,6 +145,7 @@ func (g *Goctopus) handlePost(w http.ResponseWriter, r *http.Request) {
 			mk := m
 			mk.Key = key
 			g.queueMessage(mk)
+			g.history.add(key, mk)
 			g.notify(key)
 			g.sendMessages(key)
 		}
@@ -191,10 +193,25 @@ func (g *Goctopus) authorizeBackend(w http.ResponseWriter, r *http.Request) bool
 }
 
 func (g *Goctopus) handleGet(w http.ResponseWriter, r *http.Request) {
-	defer g.mu.Unlock()
-	key := r.URL.Query().Get(KEY)
-	var data []byte
+	q := r.URL.Query()
+	key := q.Get(KEY)
+
+	// Presence: which keys currently have at least one live connection.
+	if q.Has(PRESENCE) {
+		g.handlePresence(w)
+		return
+	}
+
+	// History: recently published messages for a key (if history is enabled).
+	if key != EMPTY_STR && q.Has(HISTORY) {
+		g.handleHistory(w, key)
+		return
+	}
+
 	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	var data []byte
 	if key == EMPTY_STR {
 		g.Log(GET_ALL_MSGS)
 		b, err := g.getMarshalledKeys()
@@ -211,6 +228,39 @@ func (g *Goctopus) handleGet(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		data = b
+	}
+	w.Write(data)
+}
+
+// handlePresence returns the keys with at least one live connection and the
+// connection count for each.
+func (g *Goctopus) handlePresence(w http.ResponseWriter) {
+	g.mu.Lock()
+	counts := make(map[string]int, len(g.Conns))
+	for k, clients := range g.Conns {
+		counts[k] = len(clients)
+	}
+	g.mu.Unlock()
+
+	data, err := json.Marshal(counts)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.Write(data)
+}
+
+// handleHistory returns recently published messages retained for a key.
+func (g *Goctopus) handleHistory(w http.ResponseWriter, key string) {
+	msgs := g.history.get(key)
+	maps := make([]map[string]any, 0, len(msgs))
+	for _, m := range msgs {
+		maps = append(maps, m.toMap(true))
+	}
+	data, err := json.Marshal(maps)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 	w.Write(data)
 }

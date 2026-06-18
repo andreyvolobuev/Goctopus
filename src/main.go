@@ -54,6 +54,8 @@ func main() {
 		readTimeout      = flag.String("read-timeout", envOr(WS_READ_TIMEOUT, "70s"), "Drop a websocket connection if no frame (incl. pong) arrives within this time")
 		writeTimeout     = flag.String("write-timeout", envOr(WS_WRITE_TIMEOUT, "10s"), "Bound each websocket write so a slow client can't pin a worker")
 		reconcileEvery   = flag.String("reconcile-interval", envOr(WS_RECONCILE_INTERVAL, "0"), "Periodically re-flush local keys (safety net for multi-instance Redis pub/sub); 0 disables")
+		historySize      = flag.String("history-size", envOr(WS_HISTORY_SIZE, "0"), "Per-key number of recent messages kept for the history endpoint; 0 disables")
+		historyTTL       = flag.String("history-ttl", envOr(WS_HISTORY_TTL, "1h"), "Max age of retained history messages")
 		redisURL         = flag.String("redis-url", envOr(WS_REDIS_URL, "redis://localhost:6379/0"), "Redis connection URL when --storage=redis")
 		redisKeyTTL      = flag.String("redis-key-ttl", envOr(WS_REDIS_KEY_TTL, "24h"), "Redis EXPIRE backstop on each queue key; 0 disables")
 		tlsCert          = flag.String("tls-cert", os.Getenv(WS_TLS_CERT), "Path to TLS certificate file. Set with --tls-key to serve over TLS (wss://)")
@@ -81,6 +83,7 @@ func main() {
 
 	rl, _ := strconv.ParseFloat(*rateLimit, 64)
 	rb, _ := strconv.Atoi(*rateBurst)
+	histSize, _ := strconv.Atoi(*historySize)
 
 	cfg := &Config{
 		Host:              *host,
@@ -104,6 +107,8 @@ func main() {
 		ReadTimeout:       parseDurationOr(*readTimeout, 70*time.Second),
 		WriteTimeout:      parseDurationOr(*writeTimeout, 10*time.Second),
 		ReconcileInterval: parseDurationOr(*reconcileEvery, 0),
+		HistorySize:       histSize,
+		HistoryTTL:        parseDurationOr(*historyTTL, time.Hour),
 		TLSCert:           *tlsCert,
 		TLSKey:            *tlsKey,
 		AllowedOrigins:    splitCSV(*allowedOrigins),
