@@ -233,6 +233,24 @@ func TestWebsocketOverTLS(t *testing.T) {
 	}
 }
 
+// Stop() closes active connections so a graceful shutdown drains cleanly.
+func TestStopClosesConnections(t *testing.T) {
+	app := newTestApp(t)
+	ts := httptest.NewServer(app)
+	defer ts.Close()
+
+	conn := dialWS(t, ws.Dialer{}, wsURL(ts))
+	defer conn.Close()
+	waitFor(t, func() bool { return connCount(app, "testkey") == 1 }, "connection registered")
+
+	app.Stop()
+
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if _, _, err := wsutil.ReadServerData(conn); err == nil {
+		t.Fatal("expected the connection to be closed after Stop()")
+	}
+}
+
 // A websocket upgrade from a disallowed Origin is rejected with 403.
 func TestWebsocketOriginRejected(t *testing.T) {
 	app := newTestAppCfg(t, func(c *Config) {

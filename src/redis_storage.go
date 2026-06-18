@@ -117,12 +117,22 @@ func (s *RedisStorage) Notify(key string) error {
 
 // Subscribe runs handler for every key published by any instance (including
 // this one). It de-duplicates downstream via the per-connection in-flight set.
-func (s *RedisStorage) Subscribe(handler func(key string)) {
-	pubsub := s.client.Subscribe(s.ctx, redisEvents)
+// The goroutine stops when ctx is cancelled.
+func (s *RedisStorage) Subscribe(ctx context.Context, handler func(key string)) {
+	pubsub := s.client.Subscribe(ctx, redisEvents)
 	go func() {
+		defer pubsub.Close()
 		ch := pubsub.Channel()
-		for msg := range ch {
-			handler(msg.Payload)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case msg, ok := <-ch:
+				if !ok {
+					return
+				}
+				handler(msg.Payload)
+			}
 		}
 	}()
 }

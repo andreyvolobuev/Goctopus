@@ -1,5 +1,7 @@
 package main
 
+import "context"
+
 type Storage interface {
 	Init(*Config) error
 	// Initialize storage. Perform all the checks. Maybe connect to database.
@@ -27,7 +29,7 @@ type Storage interface {
 // reacts to those notifications.
 type Notifier interface {
 	Notify(key string) error
-	Subscribe(handler func(key string))
+	Subscribe(ctx context.Context, handler func(key string))
 }
 
 // Storages maps an engine name to a constructor. Each Goctopus instance gets

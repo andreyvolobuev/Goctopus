@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"sort"
 	"testing"
 	"time"
@@ -104,7 +105,7 @@ func TestRedisNotifyPubSub(t *testing.T) {
 	s := newRedisStorage(t)
 
 	got := make(chan string, 1)
-	s.Subscribe(func(key string) {
+	s.Subscribe(context.Background(), func(key string) {
 		select {
 		case got <- key:
 		default:

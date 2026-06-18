@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -38,11 +39,15 @@ type Goctopus struct {
 
 	config *Config
 
+	ctx    context.Context
+	cancel context.CancelFunc
+
 	metrics metrics
 }
 
 func (g *Goctopus) Start(cfg *Config) {
 	g.config = cfg
+	g.ctx, g.cancel = context.WithCancel(context.Background())
 	g.Log(START_APP)
 
 	g.storage = g.getStorage()
@@ -68,12 +73,27 @@ func (g *Goctopus) Start(cfg *Config) {
 	// If the storage backend supports cross-instance notifications (Redis),
 	// flush a key locally whenever any instance reports new messages for it.
 	if n, ok := g.storage.(Notifier); ok {
-		n.Subscribe(func(key string) {
+		n.Subscribe(g.ctx, func(key string) {
 			g.schedule(func() { g.sendMessages(key) })
 		})
 	}
 
 	go g.sweepExpired()
+}
+
+// Stop gracefully shuts the instance down: it stops background goroutines
+// (sweeper, ping loops, storage subscription) and closes all connections.
+func (g *Goctopus) Stop() {
+	if g.cancel != nil {
+		g.cancel()
+	}
+	g.mu.Lock()
+	for _, clients := range g.Conns {
+		for _, c := range clients {
+			c.close()
+		}
+	}
+	g.mu.Unlock()
 }
 
 // notify lets other instances know a key has new messages (no-op unless the
@@ -361,7 +381,13 @@ func (g *Goctopus) sweepExpired() {
 	ticker := time.NewTicker(g.config.SweepInterval)
 	defer ticker.Stop()
 
-	for range ticker.C {
+	for {
+		select {
+		case <-g.ctx.Done():
+			return
+		case <-ticker.C:
+		}
+
 		// Snapshot the key set under a brief lock, then process each key with
 		// its own short lock so the sweep never holds the global mutex for the
 		// whole pass (which would stall the server under many keys).

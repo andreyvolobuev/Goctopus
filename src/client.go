@@ -165,10 +165,16 @@ func (g *Goctopus) handleAck(c *client, payload []byte) {
 func (g *Goctopus) pingLoop(c *client) {
 	ticker := time.NewTicker(g.config.PingInterval)
 	defer ticker.Stop()
-	for range ticker.C {
-		if err := c.writePing(); err != nil {
+	for {
+		select {
+		case <-g.ctx.Done():
 			c.close()
 			return
+		case <-ticker.C:
+			if err := c.writePing(); err != nil {
+				c.close()
+				return
+			}
 		}
 	}
 }
