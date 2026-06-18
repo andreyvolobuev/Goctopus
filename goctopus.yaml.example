@@ -1,0 +1,36 @@
+# Example Goctopus config file. Run with: ./goctopus --config goctopus.yaml
+# Keys are the flag names. Explicit command-line flags override these values.
+host: 0.0.0.0
+port: "7890"
+workers: "1024"
+expire: 30m
+
+login: admin
+password: change-me
+
+authorizer: dummy
+auth: demo-user
+
+storage: redis
+redis-url: redis://localhost:6379/0
+redis-key-ttl: 24h
+
+ping-interval: 30s
+read-timeout: 70s
+write-timeout: 10s
+sweep-interval: 1m
+reconcile-interval: 15s
+
+max-message-size: "1048576"
+compress: "false"
+rate-limit: "0"
+
+allowed-origins:
+  - https://app.example.com
+  - https://admin.example.com
+
+history-size: "100"
+history-ttl: 1h
+
+log-format: json
+verbose: "false"

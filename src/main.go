@@ -12,6 +12,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 // envOr returns the value of an environment variable or a default.
@@ -20,6 +22,60 @@ func envOr(name, def string) string {
 		return v
 	}
 	return def
+}
+
+// loadConfigFile reads a YAML file into a flag-name -> string-value map. Lists
+// (e.g. allowed-origins) are joined with commas to match the flag format.
+func loadConfigFile(path string) (map[string]string, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var raw map[string]any
+	if err := yaml.Unmarshal(b, &raw); err != nil {
+		return nil, err
+	}
+	out := make(map[string]string, len(raw))
+	for k, v := range raw {
+		if list, ok := v.([]any); ok {
+			parts := make([]string, len(list))
+			for i, e := range list {
+				parts[i] = fmt.Sprint(e)
+			}
+			out[k] = strings.Join(parts, ",")
+			continue
+		}
+		out[k] = fmt.Sprint(v)
+	}
+	return out, nil
+}
+
+// applyConfigFile overlays YAML values onto flags the user did not set
+// explicitly (precedence: explicit flag > config file > env/default).
+func applyConfigFile(path string) {
+	fileVals, err := loadConfigFile(path)
+	if err != nil {
+		log.Fatalf("config file %q: %s", path, err)
+	}
+	explicit := map[string]bool{}
+	flag.Visit(func(f *flag.Flag) { explicit[f.Name] = true })
+	flag.VisitAll(func(f *flag.Flag) {
+		if explicit[f.Name] {
+			return
+		}
+		if v, ok := fileVals[f.Name]; ok {
+			_ = f.Value.Set(v)
+		}
+	})
+}
+
+// validateConfig logs warnings for configurations that are valid but likely
+// mistakes.
+func validateConfig(cfg *Config) {
+	if cfg.ReadTimeout <= cfg.PingInterval {
+		fmt.Fprintf(os.Stderr, "warning: read-timeout (%s) <= ping-interval (%s); idle clients may be dropped before a pong arrives\n",
+			cfg.ReadTimeout, cfg.PingInterval)
+	}
 }
 
 // splitCSV splits a comma-separated list, trimming spaces and dropping empties.
@@ -65,8 +121,13 @@ func main() {
 		compression      = flag.String("compress", envOr(WS_COMPRESS, "false"), "Enable permessage-deflate compression for websocket connections")
 		rateLimit        = flag.String("rate-limit", envOr(WS_RATE_LIMIT, "0"), "Per-client-IP request rate (events/sec) for the API and ws upgrades; 0 disables")
 		rateBurst        = flag.String("rate-burst", envOr(WS_RATE_BURST, "0"), "Token-bucket burst capacity for --rate-limit")
+		configPath       = flag.String("config", os.Getenv(WS_CONFIG), "Path to a YAML config file (keys are flag names; explicit flags override it)")
 	)
 	flag.Parse()
+
+	if *configPath != EMPTY_STR {
+		applyConfigFile(*configPath)
+	}
 
 	if *authURL == EMPTY_STR {
 		panic("You must set URL for authenticating incoming websocket requests. You may do that by setting WS_AUTH_URL environment variable or by running goctopus with --auth flag")
@@ -118,6 +179,8 @@ func main() {
 		RateLimit:         rl,
 		RateBurst:         rb,
 	}
+
+	validateConfig(cfg)
 
 	app := Goctopus{}
 	app.Start(cfg)
