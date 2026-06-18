@@ -29,7 +29,7 @@ func (s *MemoryStorage) DeleteQueue(key string) error {
 }
 
 func (s *MemoryStorage) AddMessage(key string, m Message) error {
-	s.storage[m.Key] = append(s.storage[key], m)
+	s.storage[key] = append(s.storage[key], m)
 	return nil
 }
 

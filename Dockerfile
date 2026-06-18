@@ -1,11 +1,11 @@
-FROM golang:1.19.2 as build
+FROM golang:1.22 AS build
 WORKDIR /go/app
+COPY go.mod go.sum ./
+RUN go mod download
 COPY . .
-RUN go build -o ws /go/app/src/.
-CMD "/bin/sh"
+RUN CGO_ENABLED=0 go build -o /go/bin/goctopus ./src/.
 
-FROM golang:1.19.2
-WORKDIR /ws
-COPY --from=build ./go/app/ws .
+FROM gcr.io/distroless/static-debian12
+COPY --from=build /go/bin/goctopus /goctopus
 EXPOSE 7890
-CMD "./ws"
+ENTRYPOINT ["/goctopus"]

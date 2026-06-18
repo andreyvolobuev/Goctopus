@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"time"
 )
 
 type AuthResponse struct {
@@ -69,6 +70,12 @@ func (a *ProxyAuthorizer) Init() error {
 		return err
 	}
 	a.url = AuthURL
-	a.client = &http.Client{}
+
+	// Bound the auth call so a hung auth backend can't pin a worker forever.
+	timeout, err := time.ParseDuration(os.Getenv(WS_AUTH_TIMEOUT))
+	if err != nil || timeout <= 0 {
+		timeout = 10 * time.Second
+	}
+	a.client = &http.Client{Timeout: timeout}
 	return nil
 }

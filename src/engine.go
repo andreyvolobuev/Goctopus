@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"log"
 	"net"
 	"os"
@@ -17,15 +18,26 @@ import (
 	"github.com/google/uuid"
 )
 
+// sendShards is the number of per-key send mutexes. Sends for a given key are
+// serialized (so the same message is never delivered twice concurrently) while
+// the global mutex stays free during network I/O.
+const sendShards = 256
+
 type Goctopus struct {
 	Conns map[string][]net.Conn
 
 	mu sync.Mutex
 
+	// sendLocks serializes delivery per key without holding the global mu
+	// during network I/O. Fixed size: bounded memory, no cleanup required.
+	sendLocks [sendShards]sync.Mutex
+
 	work       chan func()
 	sem        chan struct{}
 	storage    Storage
 	authorizer Authorizer
+
+	metrics metrics
 }
 
 func (g *Goctopus) Start() {
@@ -42,6 +54,15 @@ func (g *Goctopus) Start() {
 	}
 	g.sem = make(chan struct{}, n_workers)
 	g.work = make(chan func())
+
+	go g.sweepExpired()
+}
+
+// sendLock returns the mutex that serializes delivery for a given key.
+func (g *Goctopus) sendLock(key string) *sync.Mutex {
+	h := fnv.New32a()
+	h.Write([]byte(key))
+	return &g.sendLocks[h.Sum32()%uint32(len(g.sendLocks))]
 }
 
 func (g *Goctopus) schedule(task func()) {
@@ -88,30 +109,44 @@ func (g *Goctopus) deleteMsgQueue(key string) {
 func (g *Goctopus) sendMessages(key string) {
 	g.Log(START_SENDING, key)
 
-	if len(g.Conns[key]) == 0 {
+	// Serialize delivery per key so a message is never delivered twice
+	// concurrently, without holding the global mutex during network I/O.
+	sl := g.sendLock(key)
+	sl.Lock()
+	defer sl.Unlock()
+
+	// Snapshot connections and the queue under the global lock, then release it
+	// so the (slow, blocking) network I/O below never blocks other requests.
+	g.mu.Lock()
+	conns := append([]net.Conn(nil), g.Conns[key]...)
+	msgQueue, err := g.getMsgQueue(key)
+	g.mu.Unlock()
+
+	if len(conns) == 0 {
 		g.Log(NO_CONNS, key)
 		return
 	}
-
-	msgQueue, err := g.getMsgQueue(key)
 	if err != nil {
 		g.Log(ERR_GET_MSGS, key)
 		return
 	}
-
 	if len(msgQueue) == 0 {
 		g.Log(NO_MSGS, key)
 		return
 	}
 
-	queue := make([]Message, 0, len(msgQueue))
-	conns := make([]net.Conn, 0, len(g.Conns[key]))
+	// Deliver outside any lock. Track which messages are done (delivered or
+	// expired) and which connections died so we can apply the result later.
+	done := make(map[uuid.UUID]bool)
+	dead := make(map[net.Conn]bool)
 
-	for i, msg := range msgQueue {
+	for _, msg := range msgQueue {
 		g.Log(TRY_SENDING_MSG, msg.id, msg.Value, key)
 
 		if msg.isExpired() {
 			g.Log(MSG_EXPIRED, msg.id)
+			g.metrics.expired.Add(1)
+			done[msg.id] = true
 			continue
 		}
 
@@ -121,40 +156,62 @@ func (g *Goctopus) sendMessages(key string) {
 			continue
 		}
 
-		for _, conn := range g.Conns[key] {
-			err = g.sendMessage(conn, data, msg.id)
-			if err != nil {
-				g.Log(CONN_ERR, err, key)
-				conn.Close()
+		delivered := false
+		for _, conn := range conns {
+			if dead[conn] {
 				continue
 			}
-
-			if i == len(msgQueue)-1 {
-				conns = append(conns, conn)
+			if err := g.sendMessage(conn, data, msg.id); err != nil {
+				g.Log(CONN_ERR, err, key)
+				conn.Close()
+				dead[conn] = true
+				continue
 			}
-
-			msg.isSent = true
+			delivered = true
+			g.metrics.delivered.Add(1)
 		}
-
-		if !msg.isSent {
-			queue = append(queue, msg)
+		if delivered {
+			done[msg.id] = true
 		}
 	}
 
-	if l := len(queue); l == 0 {
-		g.deleteMsgQueue(key)
-		g.Log(ALL_SENT, key)
-	} else {
-		g.updateMsgQueue(key, queue)
-		g.Log(NOT_ALL_SENT, l, key)
+	// Apply results under the global lock. We rebuild the queue from its
+	// *current* contents minus the done ids so that messages queued
+	// concurrently during delivery are not lost.
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	current, err := g.getMsgQueue(key)
+	if err == nil {
+		kept := make([]Message, 0, len(current))
+		for _, m := range current {
+			if !done[m.id] {
+				kept = append(kept, m)
+			}
+		}
+		if len(kept) == 0 {
+			g.deleteMsgQueue(key)
+			g.Log(ALL_SENT, key)
+		} else {
+			g.updateMsgQueue(key, kept)
+			g.Log(NOT_ALL_SENT, len(kept), key)
+		}
 	}
 
-	if l := len(conns); l == 0 {
-		delete(g.Conns, key)
-		g.Log(ALL_CONNS_CLOSED, key)
-	} else {
-		g.Conns[key] = conns
-		g.Log(NOT_ALL_CONNS_CLOSED, l, key)
+	if len(dead) > 0 {
+		live := make([]net.Conn, 0, len(g.Conns[key]))
+		for _, conn := range g.Conns[key] {
+			if !dead[conn] {
+				live = append(live, conn)
+			}
+		}
+		if len(live) == 0 {
+			delete(g.Conns, key)
+			g.Log(ALL_CONNS_CLOSED, key)
+		} else {
+			g.Conns[key] = live
+			g.Log(NOT_ALL_CONNS_CLOSED, len(live), key)
+		}
 	}
 }
 
@@ -193,6 +250,9 @@ func (g *Goctopus) sendMessage(c net.Conn, d []byte, id uuid.UUID) error {
 }
 
 func (g *Goctopus) queueMessage(m Message) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
 	err := g.storage.AddMessage(m.Key, m)
 	if err != nil {
 		g.Log(ERR_TEMPLATE, err)
@@ -201,6 +261,9 @@ func (g *Goctopus) queueMessage(m Message) {
 }
 
 func (g *Goctopus) newConn(key string, conn net.Conn) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
 	g.Conns[key] = append(g.Conns[key], conn)
 	g.Log(SAVED_NEW_CONN, key)
 }
@@ -252,22 +315,15 @@ func (g *Goctopus) getMarshalledMessages(key string) ([]byte, error) {
 		g.Log(m)
 		return nil, errors.New(m)
 	}
+	// Filter out expired messages from the response. Their removal from storage
+	// is handled by the background sweeper (see sweepExpired), so we don't
+	// schedule deletion here while holding g.mu.
 	maps := []map[string]any{}
-	exp := []Message{}
 	for _, m := range q {
-		if m.isExpired() {
-			exp = append(exp, m)
-		} else {
+		if !m.isExpired() {
 			maps = append(maps, m.toMap(true))
 		}
 	}
-
-	g.schedule(func() {
-		for _, m := range exp {
-			g.Log(MSG_EXPIRED, m.id)
-			g.deleteMsgById(key, m.id)
-		}
-	})
 
 	queue, err := json.Marshal(maps)
 	if err != nil {
@@ -281,18 +337,67 @@ func (g *Goctopus) getMarshalledMessages(key string) ([]byte, error) {
 func (g *Goctopus) deleteMsgById(key string, id uuid.UUID) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	return g.deleteMsgByIdLocked(key, id)
+}
 
+// deleteMsgByIdLocked removes a message by id. The caller MUST already hold
+// g.mu. sync.Mutex is not reentrant, so calling deleteMsgById (which locks)
+// while already holding g.mu would deadlock.
+func (g *Goctopus) deleteMsgByIdLocked(key string, id uuid.UUID) error {
 	queue, err := g.getMsgQueue(key)
 	if err != nil {
 		return err
 	}
 	for i, msg := range queue {
 		if msg.id == id {
-			err := g.updateMsgQueue(key, append(queue[:i], queue[i+1:]...))
-			if err != nil {
-				return err
-			}
+			return g.updateMsgQueue(key, append(queue[:i], queue[i+1:]...))
 		}
 	}
 	return nil
+}
+
+// sweepExpired periodically removes expired messages from storage so that keys
+// nobody ever reconnects to don't leak memory forever.
+func (g *Goctopus) sweepExpired() {
+	d, err := time.ParseDuration(os.Getenv(WS_SWEEP_INTERVAL))
+	if err != nil || d <= 0 {
+		d = time.Minute
+	}
+	ticker := time.NewTicker(d)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		g.mu.Lock()
+		keys, err := g.storage.GetKeys()
+		if err != nil {
+			g.mu.Unlock()
+			continue
+		}
+		for _, key := range keys {
+			queue, err := g.getMsgQueue(key)
+			if err != nil {
+				continue
+			}
+			kept := make([]Message, 0, len(queue))
+			removed := 0
+			for _, m := range queue {
+				if m.isExpired() {
+					removed++
+					continue
+				}
+				kept = append(kept, m)
+			}
+			if removed == 0 {
+				continue
+			}
+			if len(kept) == 0 {
+				g.deleteMsgQueue(key)
+			} else {
+				g.updateMsgQueue(key, kept)
+			}
+			g.metrics.expired.Add(uint64(removed))
+			g.Log(SWEEP_EXPIRED, removed, key)
+		}
+		g.mu.Unlock()
+	}
 }

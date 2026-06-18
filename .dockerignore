@@ -1,0 +1,8 @@
+.git
+.github
+*.md
+logo.png
+LICENSE
+Dockerfile
+.dockerignore
+docker-compose.yml

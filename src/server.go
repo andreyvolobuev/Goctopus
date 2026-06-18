@@ -1,9 +1,11 @@
 package main
 
 import (
+	"crypto/subtle"
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/gobwas/ws"
 	"github.com/google/uuid"
@@ -16,6 +18,18 @@ func (g *Goctopus) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	case WS, WS_:
 		g.handleWs(w, r)
+
+	case HEALTHZ:
+		g.handleHealthz(w, r)
+
+	case READYZ:
+		g.handleReadyz(w, r)
+
+	case METRICS:
+		g.handleMetrics(w, r)
+
+	default:
+		http.NotFound(w, r)
 	}
 }
 
@@ -39,6 +53,7 @@ func (g *Goctopus) handleWs(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		g.Log(AUTH_FAILED, err)
+		g.metrics.authFail.Add(1)
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
@@ -50,9 +65,6 @@ func (g *Goctopus) handleWs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	g.schedule(func() {
-		g.mu.Lock()
-		defer g.mu.Unlock()
-
 		for _, key := range keys {
 			g.newConn(key, conn)
 			g.sendMessages(key)
@@ -63,19 +75,8 @@ func (g *Goctopus) handleWs(w http.ResponseWriter, r *http.Request) {
 func (g *Goctopus) handlePost(w http.ResponseWriter, r *http.Request) {
 	g.Log(POST_NEW_MSG)
 
-	if os.Getenv(WS_LOGIN) != EMPTY_STR && os.Getenv(WS_PASSWORD) != EMPTY_STR {
-		username, password, ok := r.BasicAuth()
-		if !ok {
-			g.Log(NO_CREDS_FOR_POST)
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-
-		if username != os.Getenv(WS_LOGIN) || password != os.Getenv(WS_PASSWORD) {
-			g.Log(BAD_CREDS_FOR_POST)
-			w.WriteHeader(http.StatusForbidden)
-			return
-		}
+	if !g.authorizePost(w, r) {
+		return
 	}
 
 	m := Message{}
@@ -86,16 +87,51 @@ func (g *Goctopus) handlePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	g.Log(NEW_MSG_CREATED, m.toMap(true))
+	g.metrics.received.Add(1)
 
 	g.schedule(func() {
-		g.mu.Lock()
-		defer g.mu.Unlock()
-
 		g.queueMessage(m)
 		g.sendMessages(m.Key)
 	})
 
 	w.WriteHeader(http.StatusAccepted)
+}
+
+// authorizePost enforces Basic Auth for backend POST requests. It fails closed:
+// unless WS_INSECURE_NO_AUTH is explicitly enabled, missing or empty
+// credentials cause the request to be rejected rather than silently accepted.
+func (g *Goctopus) authorizePost(w http.ResponseWriter, r *http.Request) bool {
+	if insecure, _ := strconv.ParseBool(os.Getenv(WS_INSECURE_NO_AUTH)); insecure {
+		return true
+	}
+
+	login := os.Getenv(WS_LOGIN)
+	pass := os.Getenv(WS_PASSWORD)
+	if login == EMPTY_STR || pass == EMPTY_STR {
+		g.Log(NO_CREDS_FOR_POST)
+		g.metrics.authFail.Add(1)
+		w.WriteHeader(http.StatusUnauthorized)
+		return false
+	}
+
+	username, password, ok := r.BasicAuth()
+	if !ok {
+		g.Log(NO_CREDS_FOR_POST)
+		g.metrics.authFail.Add(1)
+		w.WriteHeader(http.StatusUnauthorized)
+		return false
+	}
+
+	userOK := subtle.ConstantTimeCompare([]byte(username), []byte(login)) == 1
+	passOK := subtle.ConstantTimeCompare([]byte(password), []byte(pass)) == 1
+	if !userOK || !passOK {
+		g.Log(BAD_CREDS_FOR_POST)
+		g.metrics.authFail.Add(1)
+		w.WriteHeader(http.StatusForbidden)
+		return false
+	}
+
+	return true
 }
 
 func (g *Goctopus) handleGet(w http.ResponseWriter, r *http.Request) {
@@ -124,7 +160,6 @@ func (g *Goctopus) handleGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (g *Goctopus) handleDelete(w http.ResponseWriter, r *http.Request) {
-	defer g.mu.Unlock()
 	key := r.URL.Query().Get(KEY)
 	id_ := r.URL.Query().Get(ID)
 
@@ -150,35 +185,44 @@ func (g *Goctopus) handleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate the id before taking the lock so a bad request never holds it.
+	var id uuid.UUID
+	if id_ != EMPTY_STR {
+		parsed, err := uuid.Parse(id_)
+		if err != nil {
+			g.Log(INVALID_UUID, id_)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		id = parsed
+	}
+
 	g.mu.Lock()
-	if key == EMPTY_STR {
+	defer g.mu.Unlock()
+
+	switch {
+	case key == EMPTY_STR:
 		keys, err := g.storage.GetKeys()
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		for _, key := range keys {
-			g.deleteMsgQueue(key)
+		for _, k := range keys {
+			g.deleteMsgQueue(k)
 		}
 		g.Log(ALL_DELETED)
-	} else {
-		if id_ == EMPTY_STR {
-			g.deleteMsgQueue(key)
-			g.Log(ALL_DELETED_FROM_KEY, key)
-		} else {
-			id, err := uuid.Parse(id_)
-			if err != nil {
-				g.Log(INVALID_UUID, id)
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-			err = g.deleteMsgById(key, id)
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-			g.Log(DELETED_MSG, id, key)
+
+	case id_ == EMPTY_STR:
+		g.deleteMsgQueue(key)
+		g.Log(ALL_DELETED_FROM_KEY, key)
+
+	default:
+		// Caller holds g.mu, so use the *Locked variant to avoid a deadlock.
+		if err := g.deleteMsgByIdLocked(key, id); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
 		}
+		g.Log(DELETED_MSG, id, key)
 	}
 }
 

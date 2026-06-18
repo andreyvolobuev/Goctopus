@@ -1,15 +1,20 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 )
 
 var (
 	host, port, workers, expire, login, password, authUrl, verbose, storageEngine, authorizerEngine string
+	insecureNoAuth, authTimeout, sweepInterval                                                      string
 )
 
 func main() {
@@ -62,6 +67,24 @@ func main() {
 	}
 	flag.StringVar(&authorizerEngine, "authorizer", authorizerDefault, "Authorizer engine that is used to authorize incomming http requests")
 
+	insecureDefault, ok := os.LookupEnv(WS_INSECURE_NO_AUTH)
+	if !ok {
+		insecureDefault = "false"
+	}
+	flag.StringVar(&insecureNoAuth, "insecure-no-auth", insecureDefault, "Allow unauthenticated POST requests (DEVELOPMENT ONLY)")
+
+	authTimeoutDefault, ok := os.LookupEnv(WS_AUTH_TIMEOUT)
+	if !ok {
+		authTimeoutDefault = "10s"
+	}
+	flag.StringVar(&authTimeout, "auth-timeout", authTimeoutDefault, "Timeout for requests to the auth backend")
+
+	sweepDefault, ok := os.LookupEnv(WS_SWEEP_INTERVAL)
+	if !ok {
+		sweepDefault = "1m"
+	}
+	flag.StringVar(&sweepInterval, "sweep-interval", sweepDefault, "How often expired messages are swept from storage")
+
 	flag.Parse()
 
 	os.Setenv(WS_WORKERS, workers)
@@ -69,6 +92,9 @@ func main() {
 	os.Setenv(WS_LOGIN, login)
 	os.Setenv(WS_PASSWORD, password)
 	os.Setenv(WS_VERBOSE, verbose)
+	os.Setenv(WS_INSECURE_NO_AUTH, insecureNoAuth)
+	os.Setenv(WS_AUTH_TIMEOUT, authTimeout)
+	os.Setenv(WS_SWEEP_INTERVAL, sweepInterval)
 
 	if authUrl == EMPTY_STR {
 		panic("You must set URL for authenticating incoming websocket requests. You may do that by setting WS_AUTH_URL environment variable or by running goctopus with --auth flag")
@@ -87,7 +113,30 @@ func main() {
 	fmt.Printf("Default message expiry is: %s\n", os.Getenv(WS_MSG_EXPIRE))
 	fmt.Printf("----------------------------------\n\n")
 
-	if err := http.ListenAndServe(fmt.Sprintf("%s:%s", host, port), &app); err != nil {
+	srv := &http.Server{
+		Addr:    fmt.Sprintf("%s:%s", host, port),
+		Handler: &app,
+	}
+
+	// Graceful shutdown: stop accepting on SIGINT/SIGTERM and drain in-flight
+	// requests before exiting.
+	idleClosed := make(chan struct{})
+	go func() {
+		sigs := make(chan os.Signal, 1)
+		signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+		<-sigs
+
+		fmt.Printf("\nShutting down Goctopus...\n")
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(ctx); err != nil {
+			log.Printf("graceful shutdown error: %s", err)
+		}
+		close(idleClosed)
+	}()
+
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
+	<-idleClosed
 }

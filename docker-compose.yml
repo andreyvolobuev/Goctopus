@@ -1,0 +1,23 @@
+# Minimal demo stack. Replace WS_AUTH_URL with your own backend's
+# authentication endpoint (it receives the upgrade request and returns the
+# keys/topics for the connection). For local experimentation you can switch
+# WS_AUTHORIZER to "dummy", in which case WS_AUTH_URL is used verbatim as the
+# single key for every connection.
+services:
+  goctopus:
+    build: .
+    ports:
+      - "7890:7890"
+    environment:
+      WS_HOST: 0.0.0.0
+      WS_PORT: "7890"
+      WS_WORKERS: "1024"
+      WS_MSG_EXPIRE: 30m
+      WS_LOGIN: admin
+      WS_PASSWORD: change-me
+      WS_AUTHORIZER: dummy
+      WS_AUTH_URL: demo-user
+      WS_SWEEP_INTERVAL: 1m
+      WS_AUTH_TIMEOUT: 10s
+      WS_VERBOSE: "1"
+    restart: unless-stopped

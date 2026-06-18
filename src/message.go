@@ -61,6 +61,10 @@ func (m *Message) unmarshal(data io.ReadCloser) error {
 		m.Expire = os.Getenv(WS_MSG_EXPIRE)
 	}
 
+	if _, err := time.ParseDuration(m.Expire); err != nil {
+		return errors.New(INVALID_EXPIRE)
+	}
+
 	m.date = time.Now()
 	m.id, err = uuid.NewRandom()
 	if err != nil {
