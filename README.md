@@ -236,4 +236,16 @@ Reference clients for JavaScript (browser/Node), Python and Go live in [clients/
 - [x] Native TLS / `wss://` listener option
 - [x] Wildcard topics for broadcast/fan-out messaging
 - [x] Client SDKs (JS, Python, Go) with built-in reconnect and de-duplication
-- [ ] Presence (who is online) and optional message history
+- [x] Presence (who is online) and optional message history
+
+
+### Benchmarks
+
+Micro-benchmarks for the hot paths live alongside the tests:
+
+```
+go test -run '^$' -bench . ./src/.
+```
+
+They cover storage add/get, message encode/decode, key matching (incl. wildcard
+fan-out) and the rate limiter.
