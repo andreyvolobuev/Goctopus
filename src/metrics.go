@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -73,16 +74,29 @@ func newMetrics(g *Goctopus) *metrics {
 		}
 		return float64(n)
 	}))
+	// goctopus_keys requires GetKeys, which for Redis is a SCAN. Cache it with a
+	// short TTL so frequent (or hostile) scrapes can't turn /metrics into a
+	// SCAN-amplification load on the backend.
+	var (
+		keysMu  sync.Mutex
+		keysVal float64
+		keysAt  time.Time
+	)
 	reg.MustRegister(prometheus.NewGaugeFunc(prometheus.GaugeOpts{
 		Name: "goctopus_keys", Help: "Current number of keys with queued messages.",
 	}, func() float64 {
+		keysMu.Lock()
+		defer keysMu.Unlock()
+		if !keysAt.IsZero() && time.Since(keysAt) < 10*time.Second {
+			return keysVal
+		}
 		// Storage is self-synchronized; don't hold g.mu across a (possibly
 		// remote) GetKeys during a scrape.
-		k, err := g.storage.GetKeys()
-		if err != nil {
-			return 0
+		if k, err := g.storage.GetKeys(); err == nil {
+			keysVal = float64(len(k))
 		}
-		return float64(len(k))
+		keysAt = time.Now()
+		return keysVal
 	}))
 
 	return m
